@@ -1,6 +1,7 @@
 package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 
 import (
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -137,7 +138,7 @@ func TestFilePath_String(t *testing.T) {
 // Private types
 //
 
-// File implementation used for testing
+// Test File implementation
 type testFile struct {
 	path FilePath
 }
@@ -162,13 +163,58 @@ func (file *testFile) Writer() (io.WriteCloser, error) {
 	return nil, nil
 }
 
+// Test FileProducer implementation
+type testFileProducer struct {
+	destroyError error
+	files        []File
+	index        int
+	nextError    error
+}
+
+func (producer *testFileProducer) Destroy() error {
+	if producer.destroyError != nil {
+		return producer.destroyError
+	}
+
+	return nil
+}
+
+func (producer *testFileProducer) Next() (File, error) {
+	producer.index++
+
+	if producer.index == len(producer.files) {
+		if producer.nextError != nil {
+			return nil, producer.nextError
+		}
+
+		return nil, nil
+	}
+
+	return producer.files[producer.index], nil
+}
+
 //
 // Private functions
 //
 
-func newTestFile(path string) File {
-	return &testFile{
-		path: newTestFilePath(path),
+func newSimpleFileProducer(prefix string, size int) FileProducer {
+	return newTestFileProducer(prefix, size, nil, nil)
+}
+
+func newTestFileProducer(prefix string, size int, destroyError, nextError error) FileProducer {
+	var files = make([]File, size)
+
+	for i := 0; i < size; i++ {
+		files[i] = &testFile{
+			path: newTestFilePath(fmt.Sprintf("%s%d", prefix, i)),
+		}
+	}
+
+	return &testFileProducer{
+		destroyError: destroyError,
+		files:        files,
+		index:        -1,
+		nextError:    nextError,
 	}
 }
 

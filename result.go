@@ -11,17 +11,6 @@ type Result interface {
 }
 
 //
-// Public functions
-//
-
-func NewResult(file File, err error) Result {
-	return &result{
-		err:  err,
-		file: file,
-	}
-}
-
-//
 // Private types
 //
 
@@ -36,4 +25,15 @@ func (res *result) Error() error {
 
 func (res *result) File() File {
 	return res.file
+}
+
+//
+// Private functions
+//
+
+func newResult(file File, err error) Result {
+	return &result{
+		err:  err,
+		file: file,
+	}
 }

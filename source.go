@@ -77,9 +77,10 @@ func (merged *mergedSource) Files(context Context) (<-chan Result, func()) {
 		wg.Wait()
 
 		close(out)
+		close(cancel)
 	}()
 
-	return out, func() { close(cancel) }
+	return out, func() { cancel <- struct{}{} }
 }
 
 func (merged *mergedSource) Name() string {
@@ -98,34 +99,42 @@ func (src *source) Files(context Context) (<-chan Result, func()) {
 
 	go func() {
 		var err error
+		var file File
 		var producer FileProducer
 
 		defer func() {
 			if producer != nil {
 				if err := producer.Destroy(); err != nil {
-					out <- NewResult(nil, err)
+					out <- newResult(nil, err)
 				}
 			}
 
 			close(out)
+			close(cancel)
 		}()
 
 		if producer, err = src.newProducer(context); err != nil {
-			out <- NewResult(nil, err)
+			out <- newResult(nil, err)
 
 			return
 		}
 
 		if producer == nil {
 			// TODO: proper message
-			out <- NewResult(nil, errors.New("nil Producer"))
+			out <- newResult(nil, errors.New("nil Producer"))
 
 			return
 		}
 
 		for {
+			file, err = producer.Next()
+
+			if file == nil && err == nil {
+				return
+			}
+
 			select {
-			case out <- NewResult(producer.Next()):
+			case out <- newResult(file, err):
 
 			case <-cancel:
 				return
@@ -133,7 +142,7 @@ func (src *source) Files(context Context) (<-chan Result, func()) {
 		}
 	}()
 
-	return out, func() { close(cancel) }
+	return out, func() { cancel <- struct{}{} }
 }
 
 func (src *source) Name() string {
@@ -169,7 +178,6 @@ func newMergedSource(sources ...Source) Source {
 	case 0:
 		// No valid sources provided, so just create an empty one.
 
-		// TODO: nls
 		return NewSource("<empty source>", nil)
 
 	case 1:
@@ -179,7 +187,6 @@ func newMergedSource(sources ...Source) Source {
 	}
 
 	return &mergedSource{
-		// TODO: nls
 		name:    "<merged source>",
 		sources: sanitizedSources,
 	}
