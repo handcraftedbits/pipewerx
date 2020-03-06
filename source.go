@@ -19,9 +19,9 @@ type Source interface {
 // Public functions
 //
 
-func NewSource(name string, newProducer func(Context) (FileProducer, error)) Source {
+func NewSource(name string, newProducer NewFileProducerFunc) Source {
 	if newProducer == nil {
-		newProducer = func(context Context) (FileProducer, error) {
+		newProducer = func(Context) (FileProducer, error) {
 			return &nilFileProducer{}, nil
 		}
 	}
@@ -120,8 +120,7 @@ func (src *source) Files(context Context) (<-chan Result, func()) {
 		}
 
 		if producer == nil {
-			// TODO: proper message
-			out <- newResult(nil, errors.New("nil Producer"))
+			out <- newResult(nil, errors.New("nil FileProducer was created"))
 
 			return
 		}
@@ -153,7 +152,7 @@ func (src *source) Name() string {
 // Private functions
 //
 
-func newMergedSource(sources ...Source) Source {
+func newMergedSource(sources []Source) Source {
 	var duplicates = make(map[Source]bool)
 	var sanitizedSources = make([]Source, 0)
 

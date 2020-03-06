@@ -138,13 +138,21 @@ func TestFilePath_String(t *testing.T) {
 // Private types
 //
 
+// FileEvaluator implementation that discards all files
+type discardingFileEvaluator struct {
+}
+
+func (evaluator *discardingFileEvaluator) Destroy() error {
+	return nil
+}
+
+func (evaluator *discardingFileEvaluator) ShouldKeep(file File) (bool, error) {
+	return false, nil
+}
+
 // Test File implementation
 type testFile struct {
 	path FilePath
-}
-
-func (file *testFile) Delete() error {
-	return nil
 }
 
 func (file *testFile) Path() FilePath {
@@ -155,12 +163,26 @@ func (file *testFile) Reader() (io.ReadCloser, error) {
 	return nil, nil
 }
 
-func (file *testFile) Rename(newPath FilePath) error {
-	return nil
+// Test FileEvaluator implementation
+type testFileEvaluator struct {
+	destroyError   error
+	index          int
+	keepError      error
+	maxEvaluations int
 }
 
-func (file *testFile) Writer() (io.WriteCloser, error) {
-	return nil, nil
+func (evaluator *testFileEvaluator) Destroy() error {
+	return evaluator.destroyError
+}
+
+func (evaluator *testFileEvaluator) ShouldKeep(file File) (bool, error) {
+	evaluator.index++
+
+	if evaluator.index == evaluator.maxEvaluations {
+		return false, evaluator.keepError
+	}
+
+	return true, nil
 }
 
 // Test FileProducer implementation
@@ -190,6 +212,10 @@ func (producer *testFileProducer) Next() (File, error) {
 		return nil, nil
 	}
 
+	if producer.index > len(producer.files) {
+		return nil, nil
+	}
+
 	return producer.files[producer.index], nil
 }
 
@@ -199,6 +225,15 @@ func (producer *testFileProducer) Next() (File, error) {
 
 func newSimpleFileProducer(prefix string, size int) FileProducer {
 	return newTestFileProducer(prefix, size, nil, nil)
+}
+
+func newTestFileEvaluator(maxEvaluations int, destroyError, keepError error) FileEvaluator {
+	return &testFileEvaluator{
+		destroyError:   destroyError,
+		index:          -1,
+		keepError:      keepError,
+		maxEvaluations: maxEvaluations,
+	}
 }
 
 func newTestFileProducer(prefix string, size int, destroyError, nextError error) FileProducer {

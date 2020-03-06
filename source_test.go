@@ -19,8 +19,8 @@ func TestMergedSource_Items(t *testing.T) {
 			var in <-chan Result
 			var index = -1
 			var results = make([]Result, 0)
-			var source = newMergedSource(newSimpleSource("simple", "/a/b", 5), newErrorSource("init", "/a/b", 5, true,
-				false, false))
+			var source = newMergedSource([]Source{newSimpleSource("simple", "/a/b", 5),
+				newErrorSource("init", "/a/b", 5, true, false, false)})
 
 			in, _ = source.Files(newContext())
 
@@ -48,8 +48,8 @@ func TestMergedSource_Items(t *testing.T) {
 			var in <-chan Result
 			var index = -1
 			var results = make([]Result, 0)
-			var source = newMergedSource(newSimpleSource("simple", "/a/b", 5), newErrorSource("destroy", "/a/b", 5,
-				false, true, false))
+			var source = newMergedSource([]Source{newSimpleSource("simple", "/a/b", 5),
+				newErrorSource("destroy", "/a/b", 5, false, true, false)})
 
 			in, _ = source.Files(newContext())
 
@@ -90,7 +90,6 @@ func TestMergedSource_Items(t *testing.T) {
 			// Use the map as a hash set.  Since all the test paths are unique, we should end up with six keys.
 
 			So(results, ShouldHaveLength, 6)
-
 		})
 
 		Convey("it should stop when the Source is terminated", func() {
@@ -151,7 +150,7 @@ func TestNewMergedSource(t *testing.T) {
 		Convey("providing an array of nil Sources should create an empty Source", func() {
 			var in <-chan Result
 			var results []Result
-			var source = newMergedSource(nil, nil, nil)
+			var source = newMergedSource([]Source{nil, nil, nil})
 
 			in, _ = source.Files(newContext())
 
@@ -165,7 +164,7 @@ func TestNewMergedSource(t *testing.T) {
 		Convey("all nil Sources are removed", func() {
 			var in <-chan Result
 			var results []Result
-			var source = newMergedSource(nil, newSimpleSource("name", "/a/b", 3), nil)
+			var source = newMergedSource([]Source{nil, newSimpleSource("name", "/a/b", 3), nil})
 
 			in, _ = source.Files(newContext())
 
@@ -182,7 +181,7 @@ func TestNewMergedSource(t *testing.T) {
 			var results []Result
 			var source = newSimpleSource("name", "/a/b", 3)
 
-			mergedSource = newMergedSource(source, source, source)
+			mergedSource = newMergedSource([]Source{source, source, source})
 
 			in, _ = mergedSource.Files(newContext())
 
@@ -199,7 +198,7 @@ func TestNewMergedSource(t *testing.T) {
 
 func TestNewSource(t *testing.T) {
 	Convey("When creating a Source with a nil FileProducer function", t, func() {
-		var source = NewSource("name", nil)
+		var source = NewSource("source", nil)
 
 		Convey("it should produce no Results", func() {
 			var in <-chan Result
@@ -216,7 +215,7 @@ func TestNewSource(t *testing.T) {
 	})
 
 	Convey("When creating a Source with a FileProducer function that returns nil", t, func() {
-		var source = NewSource("name", func(Context) (FileProducer, error) {
+		var source = NewSource("source", func(Context) (FileProducer, error) {
 			return nil, nil
 		})
 
@@ -241,7 +240,6 @@ func TestSource_Items(t *testing.T) {
 	Convey("When creating a Source", t, func() {
 		Convey("it should produce an error Result when an initialization error occurs", func() {
 			var in <-chan Result
-			var index = -1
 			var results = make([]Result, 0)
 			var source = newErrorSource("init", "/a/b", 5, true, false, false)
 
@@ -251,20 +249,10 @@ func TestSource_Items(t *testing.T) {
 				results = append(results, result)
 			}
 
-			So(len(results), ShouldBeGreaterThanOrEqualTo, 1)
-
-			for i, result := range results {
-				if result.Error() != nil {
-					index = i
-
-					break
-				}
-			}
-
-			So(index, ShouldNotEqual, -1)
-			So(results[index].File(), ShouldBeNil)
-			So(results[index].Error(), ShouldNotBeNil)
-			So(results[index].Error().Error(), ShouldEqual, "init")
+			So(len(results), ShouldEqual, 1)
+			So(results[0].File(), ShouldBeNil)
+			So(results[0].Error(), ShouldNotBeNil)
+			So(results[0].Error().Error(), ShouldEqual, "init")
 		})
 
 		Convey("it should produce an error Result when a destruction error occurs", func() {
@@ -312,7 +300,6 @@ func TestSource_Items(t *testing.T) {
 			// Use the map as a hash set.  Since all the test paths are unique, we should end up with three keys.
 
 			So(results, ShouldHaveLength, 3)
-
 		})
 
 		Convey("it should stop when the Source is terminated", func() {
@@ -376,8 +363,8 @@ func newErrorSource(name, pathPrefix string, size int, duringCreate, duringDestr
 }
 
 func newSimpleMergedSource(size int) Source {
-	return newMergedSource(newSimpleSource("first", "/first", size),
-		newSimpleSource("second", "/second", size))
+	return newMergedSource([]Source{newSimpleSource("first", "/first", size),
+		newSimpleSource("second", "/second", size)})
 }
 
 func newSimpleSource(name, pathPrefix string, numFiles int) Source {

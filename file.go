@@ -11,15 +11,9 @@ import (
 //
 
 type File interface {
-	Delete() error
-
 	Path() FilePath
 
 	Reader() (io.ReadCloser, error)
-
-	Rename(newPath FilePath) error
-
-	Writer() (io.WriteCloser, error)
 }
 
 type FileEvaluator interface {
@@ -43,6 +37,10 @@ type FileProducer interface {
 
 	Next() (File, error)
 }
+
+type NewFileEvaluatorFunc func(Context) (FileEvaluator, error)
+
+type NewFileProducerFunc func(Context) (FileProducer, error)
 
 //
 // Public functions
@@ -109,6 +107,18 @@ func (path *filePath) String() string {
 	}
 
 	return result
+}
+
+// FileEvaluator implementation that never excludes files
+type nilFileEvaluator struct {
+}
+
+func (evaluator *nilFileEvaluator) Destroy() error {
+	return nil
+}
+
+func (evaluator *nilFileEvaluator) ShouldKeep(file File) (bool, error) {
+	return true, nil
 }
 
 // FileProducer implementation that returns no results
