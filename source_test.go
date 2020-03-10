@@ -22,7 +22,7 @@ func TestMergedSource_Items(t *testing.T) {
 			var source = newMergedSource([]Source{newSimpleSource("simple", "/a/b", 5),
 				newErrorSource("init", "/a/b", 5, true, false, false)})
 
-			in, _ = source.Files(newContext())
+			in, _ = source.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)
@@ -51,7 +51,7 @@ func TestMergedSource_Items(t *testing.T) {
 			var source = newMergedSource([]Source{newSimpleSource("simple", "/a/b", 5),
 				newErrorSource("destroy", "/a/b", 5, false, true, false)})
 
-			in, _ = source.Files(newContext())
+			in, _ = source.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)
@@ -78,7 +78,7 @@ func TestMergedSource_Items(t *testing.T) {
 			var results = make(map[string]bool)
 			var source = newSimpleMergedSource(3)
 
-			in, _ = source.Files(newContext())
+			in, _ = source.Files(NewContext())
 
 			for result := range in {
 				So(result.Error(), ShouldBeNil)
@@ -98,7 +98,7 @@ func TestMergedSource_Items(t *testing.T) {
 			var results = make([]Result, 0)
 			var source = newSimpleMergedSource(5)
 
-			in, cancel = source.Files(newContext())
+			in, cancel = source.Files(NewContext())
 
 			results = append(results, <-in)
 			results = append(results, <-in)
@@ -138,7 +138,7 @@ func TestNewMergedSource(t *testing.T) {
 			var results []Result
 			var source = newMergedSource(nil)
 
-			in, _ = source.Files(newContext())
+			in, _ = source.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)
@@ -152,7 +152,7 @@ func TestNewMergedSource(t *testing.T) {
 			var results []Result
 			var source = newMergedSource([]Source{nil, nil, nil})
 
-			in, _ = source.Files(newContext())
+			in, _ = source.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)
@@ -166,7 +166,7 @@ func TestNewMergedSource(t *testing.T) {
 			var results []Result
 			var source = newMergedSource([]Source{nil, newSimpleSource("name", "/a/b", 3), nil})
 
-			in, _ = source.Files(newContext())
+			in, _ = source.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)
@@ -183,7 +183,7 @@ func TestNewMergedSource(t *testing.T) {
 
 			mergedSource = newMergedSource([]Source{source, source, source})
 
-			in, _ = mergedSource.Files(newContext())
+			in, _ = mergedSource.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)
@@ -204,7 +204,7 @@ func TestNewSource(t *testing.T) {
 			var in <-chan Result
 			var results []Result
 
-			in, _ = source.Files(newContext())
+			in, _ = source.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)
@@ -223,7 +223,7 @@ func TestNewSource(t *testing.T) {
 			var in <-chan Result
 			var results = make([]Result, 0)
 
-			in, _ = source.Files(newContext())
+			in, _ = source.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)
@@ -243,7 +243,7 @@ func TestSource_Items(t *testing.T) {
 			var results = make([]Result, 0)
 			var source = newErrorSource("init", "/a/b", 5, true, false, false)
 
-			in, _ = source.Files(newContext())
+			in, _ = source.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)
@@ -261,7 +261,7 @@ func TestSource_Items(t *testing.T) {
 			var results = make([]Result, 0)
 			var source = newErrorSource("destroy", "/a/b", 5, false, true, false)
 
-			in, _ = source.Files(newContext())
+			in, _ = source.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)
@@ -288,7 +288,7 @@ func TestSource_Items(t *testing.T) {
 			var results = make(map[string]bool)
 			var source = newSimpleSource("simple", "/a/b", 3)
 
-			in, _ = source.Files(newContext())
+			in, _ = source.Files(NewContext())
 
 			for result := range in {
 				So(result.Error(), ShouldBeNil)
@@ -308,7 +308,7 @@ func TestSource_Items(t *testing.T) {
 			var results = make([]Result, 0)
 			var source = newSimpleSource("simple", "/a/b", 10)
 
-			in, cancel = source.Files(newContext())
+			in, cancel = source.Files(NewContext())
 
 			results = append(results, <-in)
 			results = append(results, <-in)

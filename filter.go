@@ -34,6 +34,7 @@ func NewFilter(name string, newEvaluator NewFileEvaluatorFunc, sources []Source)
 // Private types
 //
 
+// Filter implementation
 type filter struct {
 	input        Source
 	name         string

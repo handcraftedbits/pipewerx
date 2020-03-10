@@ -14,6 +14,7 @@ type Result interface {
 // Private types
 //
 
+// Result implementation
 type result struct {
 	err  error
 	file File

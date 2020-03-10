@@ -11,6 +11,16 @@ type Context interface {
 }
 
 //
+// Public functions
+//
+
+func NewContext() Context {
+	return &context{
+		vars: make(map[string]interface{}),
+	}
+}
+
+//
 // Private types
 //
 
@@ -33,14 +43,4 @@ func (ctx *context) Copy() Context {
 
 func (ctx *context) Vars() map[string]interface{} {
 	return ctx.vars
-}
-
-//
-// Private functions
-//
-
-func newContext() Context {
-	return &context{
-		vars: make(map[string]interface{}),
-	}
 }

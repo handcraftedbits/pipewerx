@@ -20,7 +20,7 @@ func TestFilter_Files(t *testing.T) {
 			var in <-chan Result
 			var results = make([]Result, 0)
 
-			in, _ = filter.Files(newContext())
+			in, _ = filter.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)
@@ -38,7 +38,7 @@ func TestFilter_Files(t *testing.T) {
 			var index = -1
 			var results = make([]Result, 0)
 
-			in, _ = filter.Files(newContext())
+			in, _ = filter.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)
@@ -65,7 +65,7 @@ func TestFilter_Files(t *testing.T) {
 			var in <-chan Result
 			var results = make(map[string]bool)
 
-			in, _ = filter.Files(newContext())
+			in, _ = filter.Files(NewContext())
 
 			for result := range in {
 				So(result.Error(), ShouldBeNil)
@@ -86,7 +86,7 @@ func TestFilter_Files(t *testing.T) {
 			var in <-chan Result
 			var results = make([]Result, 0)
 
-			in, _ = filter.Files(newContext())
+			in, _ = filter.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)
@@ -101,7 +101,7 @@ func TestFilter_Files(t *testing.T) {
 			var index = -1
 			var results = make([]Result, 0)
 
-			in, _ = filter.Files(newContext())
+			in, _ = filter.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)
@@ -129,7 +129,7 @@ func TestFilter_Files(t *testing.T) {
 			var index = -1
 			var results = make([]Result, 0)
 
-			in, _ = filter.Files(newContext())
+			in, _ = filter.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)
@@ -157,7 +157,7 @@ func TestFilter_Files(t *testing.T) {
 			var in <-chan Result
 			var results = make([]Result, 0)
 
-			in, cancel = filter.Files(newContext())
+			in, cancel = filter.Files(NewContext())
 
 			results = append(results, <-in)
 			results = append(results, <-in)
@@ -192,7 +192,7 @@ func TestNewFilter(t *testing.T) {
 			var in <-chan Result
 			var results []Result
 
-			in, _ = filter.Files(newContext())
+			in, _ = filter.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)
@@ -211,7 +211,7 @@ func TestNewFilter(t *testing.T) {
 			var in <-chan Result
 			var results = make([]Result, 0)
 
-			in, _ = filter.Files(newContext())
+			in, _ = filter.Files(NewContext())
 
 			for result := range in {
 				results = append(results, result)

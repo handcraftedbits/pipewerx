@@ -14,7 +14,7 @@ import (
 
 func TestContext_Copy(t *testing.T) {
 	Convey("When copying a Context", t, func() {
-		var context = newContext()
+		var context = NewContext()
 
 		Convey("the new Context's variables should be identical to the old Context", func() {
 			var copiedContext Context
