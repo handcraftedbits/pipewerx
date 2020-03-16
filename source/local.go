@@ -84,43 +84,43 @@ func (producer *localFileProducer) Next() (pipewerx.File, error) {
 
 	return &localFile{
 		path:     path,
-		realPath: producer.stepper.root + producer.stepper.fs.pathSeparator() + path.String(),
+		realPath: producer.stepper.root + producer.stepper.fs.PathSeparator() + path.String(),
 	}, nil
 }
 
-// filesystem implementation for local filesystem
+// Local filesystem client.Filesystem implementation
 type localFilesystem struct {
 }
 
-func (fs *localFilesystem) absolutePath(path string) (string, error) {
+func (fs *localFilesystem) AbsolutePath(path string) (string, error) {
 	return filepath.Abs(path)
 }
 
-func (fs *localFilesystem) basePart(path string) string {
+func (fs *localFilesystem) BasePart(path string) string {
 	return filepath.Base(path)
 }
 
-func (fs *localFilesystem) dirPart(path string) []string {
+func (fs *localFilesystem) DirPart(path string) []string {
 	var dir = filepath.Dir(path)
 
 	if dir == "." {
-		// This will be the case for a single file with no directory component, so return an empty array in this case.
+		// This will be the case for a single file with no directory component, so return an empty array.
 
 		return []string{}
 	}
 
-	return strings.Split(filepath.Dir(path), localFSSeparator)
+	return strings.Split(dir, localFSSeparator)
 }
 
-func (fs *localFilesystem) listFiles(path string) ([]os.FileInfo, error) {
+func (fs *localFilesystem) ListFiles(path string) ([]os.FileInfo, error) {
 	return ioutil.ReadDir(path)
 }
 
-func (fs *localFilesystem) pathSeparator() string {
+func (fs *localFilesystem) PathSeparator() string {
 	return localFSSeparator
 }
 
-func (fs *localFilesystem) statFile(path string) (os.FileInfo, error) {
+func (fs *localFilesystem) StatFile(path string) (os.FileInfo, error) {
 	return os.Stat(path)
 }
 

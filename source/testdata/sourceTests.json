@@ -1,0 +1,122 @@
+[
+  {
+    "description": "an empty directory is used as the root and recursion is enabled",
+    "recurse": true,
+    "root": "emptyDir",
+    "results": []
+  },
+  {
+    "description": "an empty directory is used as the root and recursion is disabled",
+    "recurse": false,
+    "root": "emptyDir",
+    "results": []
+  },
+
+  {
+    "description": "a directory containing multiple empty directories is used as the root and recursion is enabled",
+    "pathsToCreate": [ "a", "b/c", "d/e/f" ],
+    "recurse": true,
+    "root": "multipleEmptyDirs",
+    "results": []
+  },
+  {
+    "description": "a directory containing multiple empty directories is used as the root and recursion is disabled",
+    "pathsToCreate": [ "a", "b/c", "d/e/f" ],
+    "recurse": false,
+    "root": "multipleEmptyDirs",
+    "results": []
+  },
+
+  {
+    "description": "a single file is used as the root and recursion is enabled",
+    "recurse": true,
+    "root": "fileOnly.test",
+    "results": [
+      { "path": "fileOnly.test", "contents": "fileOnly" }
+    ]
+  },
+  {
+    "description": "a single file is used as the root and recursion is disabled",
+    "recurse": false,
+    "root": "fileOnly.test",
+    "results": [
+      { "path": "fileOnly.test", "contents": "fileOnly" }
+    ]
+  },
+
+  {
+    "description": "there are no subdirectories and recursion is enabled",
+    "recurse": true,
+    "root": "filesOnly",
+    "results": [
+      { "path": "a.test", "contents": "a" },
+      { "path": "b.test", "contents": "b" },
+      { "path": "c.test", "contents": "c" }
+    ]
+  },
+  {
+    "description": "there are no subdirectories and recursion is disabled",
+    "recurse": false,
+    "root": "filesOnly",
+    "results": [
+      { "path": "a.test", "contents": "a" },
+      { "path": "b.test", "contents": "b" },
+      { "path": "c.test", "contents": "c" }
+    ]
+  },
+
+  {
+    "description": "there is a single level of subdirectories and recursion is enabled",
+    "recurse": true,
+    "root": "singleLevelSubdirs",
+    "results": [
+      { "path": "a/a.test", "contents": "a" },
+      { "path": "b/b.test", "contents": "b" },
+      { "path": "c/c.test", "contents": "c" }
+    ]
+  },
+  {
+    "description": "there is a single level of subdirectories and recursion is disabled",
+    "recurse": false,
+    "root": "singleLevelSubdirs",
+    "results": []
+  },
+
+  {
+    "description": "there are multiple levels of subdirectories and recursion is enabled",
+    "recurse": true,
+    "root": "multiLevelSubdirs",
+    "results": [
+      { "path": "a/a.test", "contents": "a" },
+      { "path": "b/c/c.test", "contents": "c" },
+      { "path": "d/e/f/f.test", "contents": "f" }
+    ]
+  },
+  {
+    "description": "there are multiple levels of subdirectories and recursion is disabled",
+    "recurse": false,
+    "root": "multiLevelSubdirs",
+    "results": []
+  },
+
+  {
+    "description": "there is a mixture of subdirectory depths and recursion is enabled",
+    "recurse": true,
+    "root": "mixed",
+    "results": [
+      { "path": "a.test", "contents": "a" },
+      { "path": "b.test", "contents": "b" },
+      { "path": "c/c.test", "contents": "c" },
+      { "path": "d/e/f/f.test", "contents": "f" }
+    ]
+  },
+  {
+    "description": "there is a mixture of subdirectory depths and recursion is disabled",
+    "recurse": false,
+    "root": "mixed",
+    "results": [
+      { "path": "a.test", "contents": "a" },
+      { "path": "b.test", "contents": "b" }
+    ]
+  }
+]

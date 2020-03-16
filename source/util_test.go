@@ -8,6 +8,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 
 	"golang.handcraftedbits.com/pipewerx"
+	"golang.handcraftedbits.com/pipewerx/internal/client"
 )
 
 //
@@ -24,12 +25,12 @@ func TestFindFiles(t *testing.T) {
 			var path pipewerx.FilePath
 			var stepper *pathStepper
 
-			stepper, err = newPathStepper(localFSInstance, "testdata/local/singleLevelSubdirs", true)
+			stepper, err = newPathStepper(localFSInstance, "testdata/fileProducer/singleLevelSubdirs", true)
 
 			So(err, ShouldBeNil)
 			So(stepper, ShouldNotBeNil)
 
-			stepper.fs = newErrorFilesystem(nil, listFilesError)
+			stepper.fs = newErrorFilesystem(stepper.fs, nil, listFilesError)
 
 			path, err = stepper.nextFile()
 
@@ -58,7 +59,7 @@ func TestNewPathStepper(t *testing.T) {
 				var err error
 				var stepper *pathStepper
 
-				stepper, err = newPathStepper(newErrorFilesystem(absolutePathError, nil), "/", false)
+				stepper, err = newPathStepper(newErrorFilesystem(nil, absolutePathError, nil), "/", false)
 
 				So(stepper, ShouldBeNil)
 				So(err, ShouldNotBeNil)
@@ -71,37 +72,53 @@ func TestNewPathStepper(t *testing.T) {
 // Private types
 //
 
-// filesystem implementation used to test uncommon errors.
+// client.Filesystem implementation used to test uncommon errors.
 type errorFilesystem struct {
-	*localFilesystem
+	wrapped client.Filesystem
 
 	absolutePathError error
 	listFilesError    error
 }
 
-func (fs *errorFilesystem) absolutePath(path string) (string, error) {
+func (fs *errorFilesystem) AbsolutePath(path string) (string, error) {
 	if fs.absolutePathError != nil {
 		return "", fs.absolutePathError
 	}
 
-	return fs.localFilesystem.absolutePath(path)
+	return fs.wrapped.AbsolutePath(path)
 }
 
-func (fs *errorFilesystem) listFiles(path string) ([]os.FileInfo, error) {
+func (fs *errorFilesystem) BasePart(path string) string {
+	return fs.wrapped.BasePart(path)
+}
+
+func (fs *errorFilesystem) DirPart(path string) []string {
+	return fs.wrapped.DirPart(path)
+}
+
+func (fs *errorFilesystem) ListFiles(path string) ([]os.FileInfo, error) {
 	if fs.listFilesError != nil {
 		return nil, fs.listFilesError
 	}
 
-	return fs.localFilesystem.listFiles(path)
+	return fs.wrapped.ListFiles(path)
+}
+
+func (fs *errorFilesystem) PathSeparator() string {
+	return fs.wrapped.PathSeparator()
+}
+
+func (fs *errorFilesystem) StatFile(path string) (os.FileInfo, error) {
+	return fs.wrapped.StatFile(path)
 }
 
 //
 // Private functions
 //
 
-func newErrorFilesystem(absolutePathError, listFilesError error) filesystem {
+func newErrorFilesystem(wrapped client.Filesystem, absolutePathError, listFilesError error) client.Filesystem {
 	return &errorFilesystem{
-		localFilesystem:   localFSInstance,
+		wrapped:           wrapped,
 		absolutePathError: absolutePathError,
 		listFilesError:    listFilesError,
 	}

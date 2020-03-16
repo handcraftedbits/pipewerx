@@ -5,32 +5,18 @@ import (
 	"strings"
 
 	"golang.handcraftedbits.com/pipewerx"
+	"golang.handcraftedbits.com/pipewerx/internal/client"
 )
 
 //
 // Private types
 //
 
-// filesystem is used to abstract details about a particular file source.
-type filesystem interface {
-	absolutePath(path string) (string, error)
-
-	basePart(path string) string
-
-	dirPart(path string) []string
-
-	listFiles(path string) ([]os.FileInfo, error)
-
-	pathSeparator() string
-
-	statFile(path string) (os.FileInfo, error)
-}
-
 // pathStepper is used to "step" through a filesystem path by listing one file at a time.
 type pathStepper struct {
 	dirs  *stringStack
 	files *stringStack
-	fs    filesystem
+	fs    client.Filesystem
 	root  string
 }
 
@@ -45,7 +31,7 @@ func (stepper *pathStepper) nextFile() (pipewerx.FilePath, error) {
 		}
 	}
 
-	return newFilePathFromString(stepper.fs, stepper.root, stepper.files.pop(), stepper.fs.pathSeparator()), nil
+	return newFilePathFromString(stepper.fs, stepper.root, stepper.files.pop(), stepper.fs.PathSeparator()), nil
 }
 
 // stringStack is used to create a simple stack of strings.
@@ -81,12 +67,12 @@ func (stack *stringStack) push(item string) {
 //
 
 // Finds all files and directories within the current path, without diving into subdirectories.
-func findFiles(fs filesystem, path string, dirs, files *stringStack) error {
+func findFiles(fs client.Filesystem, path string, dirs, files *stringStack) error {
 	var err error
 	var fileInfo os.FileInfo
 	var fileInfos []os.FileInfo
 
-	fileInfo, err = fs.statFile(path)
+	fileInfo, err = fs.StatFile(path)
 
 	if err != nil {
 		return err
@@ -98,14 +84,14 @@ func findFiles(fs filesystem, path string, dirs, files *stringStack) error {
 		return nil
 	}
 
-	fileInfos, err = fs.listFiles(path)
+	fileInfos, err = fs.ListFiles(path)
 
 	if err != nil {
 		return err
 	}
 
 	for _, fileInfo = range fileInfos {
-		var newPath = path + fs.pathSeparator() + fileInfo.Name()
+		var newPath = path + fs.PathSeparator() + fileInfo.Name()
 
 		if fileInfo.IsDir() {
 			dirs.push(newPath)
@@ -117,18 +103,18 @@ func findFiles(fs filesystem, path string, dirs, files *stringStack) error {
 	return nil
 }
 
-func newFilePathFromString(fs filesystem, root, path, separator string) pipewerx.FilePath {
+func newFilePathFromString(fs client.Filesystem, root, path, separator string) pipewerx.FilePath {
 	path = stripRoot(root, path, separator)
 
-	return pipewerx.NewFilePath(fs.dirPart(path), fs.basePart(path), separator)
+	return pipewerx.NewFilePath(fs.DirPart(path), fs.BasePart(path), separator)
 }
 
-func newPathStepper(fs filesystem, root string, recurse bool) (*pathStepper, error) {
+func newPathStepper(fs client.Filesystem, root string, recurse bool) (*pathStepper, error) {
 	var err error
 	var dirs = &stringStack{}
 	var files = &stringStack{}
 
-	root, err = fs.absolutePath(root)
+	root, err = fs.AbsolutePath(root)
 
 	if err != nil {
 		return nil, err
@@ -148,7 +134,7 @@ func newPathStepper(fs filesystem, root string, recurse bool) (*pathStepper, err
 		// Special case.  This implies that the root is a single file, not a directory, so we need to adjust the root
 		// directory accordingly or else downstream methods like File.Reader() will fail.
 
-		root = strings.Join(fs.dirPart(root), fs.pathSeparator())
+		root = strings.Join(fs.DirPart(root), fs.PathSeparator())
 	}
 
 	return &pathStepper{
