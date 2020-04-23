@@ -1,7 +1,6 @@
 package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 
 import (
-	"errors"
 	"sync"
 )
 
@@ -10,26 +9,32 @@ import (
 //
 
 type Source interface {
-	Files(context Context) (<-chan Result, func())
+	destroy() error
+
+	Files(context Context) (<-chan Result, CancelFunc)
 
 	Name() string
+}
+
+type SourceConfig struct {
+	Name    string
+	Recurse bool
+	Root    string
 }
 
 //
 // Public functions
 //
 
-func NewSource(name string, newProducer NewFileProducerFunc) Source {
-	if newProducer == nil {
-		newProducer = func(Context) (FileProducer, error) {
-			return &nilFileProducer{}, nil
-		}
+func NewSource(config SourceConfig, fs Filesystem) (Source, error) {
+	if fs == nil {
+		return nil, errSourceNilFilesystem
 	}
 
 	return &source{
-		name:        name,
-		newProducer: newProducer,
-	}
+		config: config,
+		fs:     fs,
+	}, nil
 }
 
 //
@@ -42,17 +47,38 @@ type mergedSource struct {
 	sources []Source
 }
 
-func (merged *mergedSource) Files(context Context) (<-chan Result, func()) {
+func (merged *mergedSource) destroy() error {
+	var errs []error
+
+	for _, source := range merged.sources {
+		if err := source.destroy(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if errs != nil {
+		return newMultiError(sourceMergedDestroyMessage, errs)
+	}
+
+	return nil
+}
+
+func (merged *mergedSource) Files(context Context) (<-chan Result, CancelFunc) {
 	var cancel = make(chan struct{})
+	var cancelHelper *cancellationHelper
 	var out = make(chan Result)
 	var wg sync.WaitGroup
 
+	cancelHelper = newCancellationHelper(context.Log(), out, cancel, &wg)
+
 	wg.Add(len(merged.sources))
+
+	go cancelHelper.finalize()
 
 	for i, source := range merged.sources {
 		go func(index int, self Source) {
 			var in <-chan Result
-			var sourceCancel func()
+			var sourceCancel CancelFunc
 
 			defer func() {
 				wg.Done()
@@ -65,7 +91,7 @@ func (merged *mergedSource) Files(context Context) (<-chan Result, func()) {
 				case out <- item:
 
 				case <-cancel:
-					sourceCancel()
+					sourceCancel(nil)
 
 					return
 				}
@@ -73,14 +99,7 @@ func (merged *mergedSource) Files(context Context) (<-chan Result, func()) {
 		}(i, source)
 	}
 
-	go func() {
-		wg.Wait()
-
-		close(out)
-		close(cancel)
-	}()
-
-	return out, func() { cancel <- struct{}{} }
+	return out, cancelHelper.invoker()
 }
 
 func (merged *mergedSource) Name() string {
@@ -89,51 +108,43 @@ func (merged *mergedSource) Name() string {
 
 // Default Source implementation
 type source struct {
-	name        string
-	newProducer func(Context) (FileProducer, error)
+	config SourceConfig
+	fs     Filesystem
 }
 
-func (src *source) Files(context Context) (<-chan Result, func()) {
+func (src *source) destroy() error {
+	return src.fs.Destroy()
+}
+
+func (src *source) Files(context Context) (<-chan Result, CancelFunc) {
 	var cancel = make(chan struct{})
+	var cancelHelper *cancellationHelper
 	var out = make(chan Result)
+
+	cancelHelper = newCancellationHelper(context.Log(), out, cancel, nil)
 
 	go func() {
 		var err error
 		var file File
-		var producer FileProducer
+		var stepper *pathStepper
 
-		defer func() {
-			if producer != nil {
-				if err := producer.Destroy(); err != nil {
-					out <- newResult(nil, err)
-				}
-			}
+		defer cancelHelper.finalize()
 
-			close(out)
-			close(cancel)
-		}()
-
-		if producer, err = src.newProducer(context); err != nil {
-			out <- newResult(nil, err)
-
-			return
-		}
-
-		if producer == nil {
-			out <- newResult(nil, errors.New("nil FileProducer was created"))
+		if stepper, err = newPathStepper(src.fs, src.config.Root, src.config.Recurse); err != nil {
+			out <- &result{err: err}
 
 			return
 		}
 
 		for {
-			file, err = producer.Next()
+			file, err = stepper.nextFile()
 
 			if file == nil && err == nil {
 				return
 			}
 
 			select {
-			case out <- newResult(file, err):
+			case out <- &result{err: err, file: file}:
 
 			case <-cancel:
 				return
@@ -141,18 +152,27 @@ func (src *source) Files(context Context) (<-chan Result, func()) {
 		}
 	}()
 
-	return out, func() { cancel <- struct{}{} }
+	return out, cancelHelper.invoker()
 }
 
 func (src *source) Name() string {
-	return src.name
+	return src.config.Name
 }
+
+//
+// Private constants
+//
+
+const (
+	sourceMergedDestroyMessage = "an error occurred while destroying the source"
+	sourceMergedName           = "<multiple sources>"
+)
 
 //
 // Private functions
 //
 
-func newMergedSource(sources []Source) Source {
+func newMergedSource(sources []Source) (Source, error) {
 	var duplicates = make(map[Source]bool)
 	var sanitizedSources = make([]Source, 0)
 
@@ -175,18 +195,18 @@ func newMergedSource(sources []Source) Source {
 
 	switch len(sanitizedSources) {
 	case 0:
-		// No valid sources provided, so just create an empty one.
+		// No valid sources provided, so return an error.
 
-		return NewSource("<empty source>", nil)
+		return nil, errSourceNone
 
 	case 1:
 		// Only a single source provided, so just use it directly.
 
-		return sanitizedSources[0]
+		return sanitizedSources[0], nil
 	}
 
 	return &mergedSource{
-		name:    "<merged source>",
+		name:    sourceMergedName,
 		sources: sanitizedSources,
-	}
+	}, nil
 }

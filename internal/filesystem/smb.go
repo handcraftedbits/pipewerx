@@ -1,4 +1,4 @@
-package client // import "golang.handcraftedbits.com/pipewerx/internal/client"
+package filesystem // import "golang.handcraftedbits.com/pipewerx/internal/filesystem"
 
 import (
 	"errors"
@@ -10,25 +10,20 @@ import (
 	"strings"
 
 	"github.com/hirochachacha/go-smb2"
+
+	"golang.handcraftedbits.com/pipewerx"
 )
 
 //
 // Public types
 //
 
-type SMB interface {
-	Filesystem
-
-	Disconnect()
-
-	OpenFile(path string) (io.ReadCloser, error)
-}
-
 type SMBConfig struct {
 	Domain   string
 	Host     string
 	Password string
 	Port     int
+	Root     string
 	Share    string
 	Username string
 }
@@ -37,12 +32,14 @@ type SMBConfig struct {
 // Public functions
 //
 
-func NewSMB(config *SMBConfig) (SMB, error) {
-	var c = &smb{}
+func NewSMB(config SMBConfig) (pipewerx.Filesystem, error) {
 	var dialer *smb2.Dialer
 	var err error
+	var fs = &smb{
+		root: config.Root,
+	}
 
-	c.connection, err = net.Dial("tcp", fmt.Sprintf("%s:%d", config.Host, config.Port))
+	fs.connection, err = net.Dial("tcp", fmt.Sprintf("%s:%d", config.Host, config.Port))
 
 	if err != nil {
 		return nil, err
@@ -56,51 +53,71 @@ func NewSMB(config *SMBConfig) (SMB, error) {
 		},
 	}
 
-	c.client, err = dialer.Dial(c.connection)
+	fs.client, err = dialer.Dial(fs.connection)
 
 	if err != nil {
-		c.Disconnect()
+		// TODO: log.
+		_ = fs.Destroy()
 
 		return nil, err
 	}
 
-	c.fs, err = c.client.Mount(fmt.Sprintf("\\\\%s\\%s", config.Host, config.Share))
+	fs.remote, err = fs.client.Mount(fmt.Sprintf("\\\\%s\\%s", config.Host, config.Share))
 
 	if err != nil {
-		c.Disconnect()
+		// TODO: log
+		_ = fs.Destroy()
 
 		return nil, err
 	}
 
-	return c, nil
+	return fs, nil
 }
 
 //
 // Private types
 //
 
-// SMB implementation
+// pipewerx.Filesystem implementation for an SMB filesystem
 type smb struct {
 	client     *smb2.Client
 	connection net.Conn
-	fs         *smb2.RemoteFileSystem
+	remote     *smb2.RemoteFileSystem
+	root       string
 }
 
-func (c *smb) AbsolutePath(path string) (string, error) {
+func (fs *smb) AbsolutePath(path string) (string, error) {
 	path = strings.ReplaceAll(path, smbPathSeparator, "/")
 	path = pathutil.Clean(path)
 
 	return strings.ReplaceAll(path, "/", smbPathSeparator), nil
 }
 
-func (c *smb) BasePart(path string) string {
+func (fs *smb) BasePart(path string) string {
 	path = strings.ReplaceAll(path, smbPathSeparator, "/")
 
 	return strings.ReplaceAll(pathutil.Base(path), "/", smbPathSeparator)
-
 }
 
-func (c *smb) DirPart(path string) []string {
+func (fs *smb) Destroy() error {
+	if fs.remote != nil {
+		_ = fs.remote.Umount()
+	}
+
+	if fs.client != nil {
+		_ = fs.client.Logoff()
+	}
+
+	if fs.connection != nil {
+		_ = fs.connection.Close()
+	}
+
+	// TODO: proper error.
+
+	return nil
+}
+
+func (fs *smb) DirPart(path string) []string {
 	var dir = pathutil.Dir(strings.ReplaceAll(path, smbPathSeparator, "/"))
 
 	if dir == "." {
@@ -112,27 +129,12 @@ func (c *smb) DirPart(path string) []string {
 	return strings.Split(dir, "/")
 }
 
-// TODO: probably should log as warnings.
-func (c *smb) Disconnect() {
-	if c.fs != nil {
-		_ = c.fs.Umount()
-	}
-
-	if c.client != nil {
-		_ = c.client.Logoff()
-	}
-
-	if c.connection != nil {
-		_ = c.connection.Close()
-	}
-}
-
-func (c *smb) ListFiles(path string) ([]os.FileInfo, error) {
+func (fs *smb) ListFiles(path string) ([]os.FileInfo, error) {
 	var err error
 	var file *smb2.RemoteFile
 	var fileInfos []os.FileInfo
 
-	file, err = c.fs.Open(path)
+	file, err = fs.remote.Open(path)
 
 	if err != nil {
 		return nil, err
@@ -143,7 +145,6 @@ func (c *smb) ListFiles(path string) ([]os.FileInfo, error) {
 	_ = file.Close()
 
 	if err != nil {
-		// TODO: separate client test for this.
 		if errors.Is(err, io.EOF) {
 			// go-smb2 seems to return this when there's an empty directory.
 
@@ -156,17 +157,25 @@ func (c *smb) ListFiles(path string) ([]os.FileInfo, error) {
 	return fileInfos, nil
 }
 
-// TODO: separate client test for this.
-func (c *smb) OpenFile(path string) (io.ReadCloser, error) {
-	return c.fs.Open(path)
-}
-
-func (c *smb) PathSeparator() string {
+func (fs *smb) PathSeparator() string {
 	return smbPathSeparator
 }
 
-func (c *smb) StatFile(path string) (os.FileInfo, error) {
-	return c.fs.Stat(path)
+func (fs *smb) ReadFile(path string) (io.ReadCloser, error) {
+	// TODO: ugly, gotta be a better way.
+	if fs.root != "" {
+		if fs.BasePart(fs.root) != path {
+			path = fs.root + smbPathSeparator + path
+		} else {
+			path = fs.root
+		}
+	}
+
+	return fs.remote.Open(path)
+}
+
+func (fs *smb) StatFile(path string) (os.FileInfo, error) {
+	return fs.remote.Stat(path)
 }
 
 //

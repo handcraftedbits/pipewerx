@@ -1,10 +1,15 @@
 package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -13,121 +18,140 @@ import (
 // Testcases
 //
 
+// File tests
+
+func TestFile(t *testing.T) {
+	Convey("When creating a File", t, func() {
+		var f = &file{
+			fs: &memFilesystem{
+				root: &memFilesystemNode{
+					children: map[string]*memFilesystemNode{
+						"name": {
+							contents: "abc",
+						},
+					},
+				},
+			},
+			path: NewFilePath(nil, "name", "/"),
+		}
+
+		Convey("calling Path should return the expected FilePath", func() {
+			So(f.Path().String(), ShouldEqual, "name")
+		})
+
+		Convey("calling ReadFile should return the expected contents", func() {
+			var contents []byte
+			var err error
+			var reader io.ReadCloser
+
+			reader, err = f.Reader()
+
+			So(err, ShouldBeNil)
+			So(reader, ShouldNotBeNil)
+
+			contents, err = ioutil.ReadAll(reader)
+
+			So(err, ShouldBeNil)
+			So(string(contents), ShouldEqual, "abc")
+		})
+	})
+}
+
 // FilePath tests
 
-func TestFilePath_Dir(t *testing.T) {
-	Convey("When creating a FilePath with a nil directory array", t, func() {
-		var filePath = NewFilePath(nil, "name", "/")
+func TestFilePath(t *testing.T) {
+	Convey("When creating a FilePath", t, func() {
+		Convey("with a nil directory array", func() {
+			var filePath = NewFilePath(nil, "name", "/")
 
-		Convey("it should have a zero-length directory array", func() {
-			So(filePath.Dir(), ShouldNotBeNil)
-			So(filePath.Dir(), ShouldBeEmpty)
+			Convey("calling Dir should return a zero-length directory array", func() {
+				So(filePath.Dir(), ShouldNotBeNil)
+				So(filePath.Dir(), ShouldBeEmpty)
+			})
+
+			Convey("calling String should return a string that does not contain any separators", func() {
+				So(filePath.String(), ShouldEqual, "name")
+			})
 		})
 
-		Convey("its string representation should not contain any separators", func() {
-			So(filePath.String(), ShouldEqual, "name")
-		})
-	})
+		Convey("with an empty directory array", func() {
+			var filePath = NewFilePath([]string{}, "name", "/")
 
-	Convey("When creating a FilePath with a non-nil but empty directory array", t, func() {
-		var filePath = NewFilePath([]string{}, "name", "/")
+			Convey("calling Dir should return a zero-length directory array", func() {
+				So(filePath.Dir(), ShouldNotBeNil)
+				So(filePath.Dir(), ShouldBeEmpty)
+			})
 
-		Convey("its string representation should not contain any separators", func() {
-			So(filePath.String(), ShouldEqual, "name")
-		})
-	})
-
-	Convey("When creating a FilePath with a non-nil, non-empty directory array", t, func() {
-		var filePath = NewFilePath([]string{"home", "user"}, "name", "/")
-
-		Convey("the expected values should appear in the directory array", func() {
-			So(filePath.Dir(), ShouldNotBeNil)
-			So(filePath.Dir(), ShouldHaveLength, 2)
-			So(filePath.Dir()[0], ShouldEqual, "home")
-			So(filePath.Dir()[1], ShouldEqual, "user")
-		})
-	})
-}
-
-func TestFilePath_Extension(t *testing.T) {
-	Convey("When creating a FilePath with an extension-less file", t, func() {
-		var filePath = NewFilePath(nil, "name", "/")
-
-		Convey("it should have an empty extension value", func() {
-			So(filePath.Extension(), ShouldBeEmpty)
-			So(strings.Index(filePath.String(), "."), ShouldEqual, -1)
+			Convey("calling String should return a string that does not contain any separators", func() {
+				So(filePath.String(), ShouldEqual, "name")
+			})
 		})
 
-		Convey("it should have the correct filename", func() {
-			So(filePath.Name(), ShouldEqual, "name")
-		})
-	})
+		Convey("with a non-empty directory array", func() {
+			var filePath = NewFilePath([]string{"home", "user"}, "name", "/")
 
-	Convey("When creating a FilePath for a file with an extension", t, func() {
-		var filePath = NewFilePath(nil, "name.ext", "/")
-
-		Convey("it should have the correct extension", func() {
-			So(filePath.Extension(), ShouldEqual, "ext")
-			So(filePath.String(), ShouldEndWith, ".ext")
+			Convey("calling Dir should return the expected values", func() {
+				So(filePath.Dir(), ShouldNotBeNil)
+				So(filePath.Dir(), ShouldHaveLength, 2)
+				So(filePath.Dir()[0], ShouldEqual, "home")
+				So(filePath.Dir()[1], ShouldEqual, "user")
+			})
 		})
 
-		Convey("it should have a filename that excludes the extension", func() {
-			So(filePath.Name(), ShouldEqual, "name")
+		Convey("for an extension-less file", func() {
+			var filePath = NewFilePath(nil, "name", "/")
+
+			Convey("calling Extension should return an empty string", func() {
+				So(filePath.Extension(), ShouldBeEmpty)
+				So(strings.Index(filePath.String(), "."), ShouldEqual, -1)
+			})
+
+			Convey("calling Name should return the correct filename", func() {
+				So(filePath.Name(), ShouldEqual, "name")
+			})
 		})
-	})
-}
 
-func TestFilePath_Name(t *testing.T) {
-	Convey("When creating a FilePath with an extension-less file", t, func() {
-		var filePath = NewFilePath(nil, "name", "/")
+		Convey("for a file with an extension", func() {
+			var filePath = NewFilePath(nil, "name.ext", "/")
 
-		Convey("it should have the correct filename", func() {
-			So(filePath.Name(), ShouldEqual, "name")
+			Convey("calling Extension should return the correct extension", func() {
+				So(filePath.Extension(), ShouldEqual, "ext")
+				So(filePath.String(), ShouldEndWith, ".ext")
+			})
+
+			Convey("calling Name should return a filename that excludes the extension", func() {
+				So(filePath.Name(), ShouldEqual, "name")
+			})
 		})
-	})
 
-	Convey("When creating a FilePath for a file with an extension", t, func() {
-		var filePath = NewFilePath(nil, "name.ext", "/")
-
-		Convey("it should have a filename that excludes the extension", func() {
-			So(filePath.Name(), ShouldEqual, "name")
-		})
-	})
-
-}
-
-func TestFilePath_String(t *testing.T) {
-	Convey("When dealing with UNIX paths", t, func() {
-		Convey("When creating a valid, absolute FilePath", func() {
+		Convey("for an absolute UNIX path", func() {
 			var filePath = NewFilePath([]string{"/home", "user"}, "name.ext", "/")
 
-			Convey("its string representation should be as expected", func() {
+			Convey("calling String should return the expected string representation", func() {
 				So(filePath.String(), ShouldEqual, "/home/user/name.ext")
 			})
 		})
 
-		Convey("When creating a valid, relative FilePath", func() {
+		Convey("for a relative UNIX path", func() {
 			var filePath = NewFilePath([]string{"home", "user"}, "name.ext", "/")
 
-			Convey("its string representation should be as expected", func() {
+			Convey("calling String should return the expected string representation", func() {
 				So(filePath.String(), ShouldEqual, "home/user/name.ext")
 			})
 		})
-	})
 
-	Convey("When dealing with Windows paths", t, func() {
-		Convey("When creating a valid, absolute FilePath", func() {
+		Convey("for an absolute Windows path", func() {
 			var filePath = NewFilePath([]string{"C:", "home", "user"}, "name.ext", "\\")
 
-			Convey("its string representation should be as expected", func() {
+			Convey("calling String should return the expected string representation", func() {
 				So(filePath.String(), ShouldEqual, "C:\\home\\user\\name.ext")
 			})
 		})
 
-		Convey("When creating a valid, relative FilePath", func() {
+		Convey("for a relative Windows path", func() {
 			var filePath = NewFilePath([]string{"home", "user"}, "name.ext", "\\")
 
-			Convey("its string representation should be as expected", func() {
+			Convey("calling String should return the expected string representation", func() {
 				So(filePath.String(), ShouldEqual, "home\\user\\name.ext")
 			})
 		})
@@ -150,17 +174,191 @@ func (evaluator *discardingFileEvaluator) ShouldKeep(file File) (bool, error) {
 	return false, nil
 }
 
-// Test File implementation
-type testFile struct {
-	path FilePath
+// In-memory Filesystem implementation.
+type memFilesystem struct {
+	absolutePathError error
+	destroy           func() error
+	listFilesError    error
+	readFileError     error
+	panic             bool
+	root              *memFilesystemNode
+	statFileError     error
 }
 
-func (file *testFile) Path() FilePath {
-	return file.path
+func (fs *memFilesystem) AbsolutePath(path string) (string, error) {
+	if fs.absolutePathError != nil {
+		if fs.panic {
+			panic(fs.absolutePathError)
+		}
+
+		return "", fs.absolutePathError
+	}
+
+	return path, nil
 }
 
-func (file *testFile) Reader() (io.ReadCloser, error) {
-	return nil, nil
+func (fs *memFilesystem) BasePart(path string) string {
+	return filepath.Base(path)
+}
+
+func (fs *memFilesystem) Destroy() error {
+	if fs.destroy != nil {
+		return fs.destroy()
+	}
+
+	return nil
+}
+
+func (fs *memFilesystem) DirPart(path string) []string {
+	var dirPart = filepath.Dir(path)
+
+	if dirPart == "." {
+		return []string{}
+	}
+
+	return strings.Split(dirPart, "/")
+}
+
+func (fs *memFilesystem) ListFiles(path string) ([]os.FileInfo, error) {
+	var children []os.FileInfo
+	var node *memFilesystemNode
+
+	if fs.listFilesError != nil {
+		if fs.panic {
+			panic(fs.listFilesError)
+		}
+
+		return nil, fs.listFilesError
+	}
+
+	node = fs.findNode(path)
+
+	if node == nil {
+		return nil, memFilesystemErrorNotFound
+	}
+
+	if !node.IsDir() {
+		return []os.FileInfo{node}, nil
+	}
+
+	for name, child := range node.children {
+		// We don't want to redundantly provide node names when specifying them as literals, so we'll take this
+		// opportunity to assign the correct name here.
+
+		child.name = name
+
+		children = append(children, child)
+	}
+
+	return children, nil
+}
+
+func (fs *memFilesystem) PathSeparator() string {
+	return "/"
+}
+
+func (fs *memFilesystem) ReadFile(path string) (io.ReadCloser, error) {
+	var node *memFilesystemNode
+	var reader io.Reader
+
+	if fs.readFileError != nil {
+		if fs.panic {
+			panic(fs.readFileError)
+		}
+
+		return nil, fs.readFileError
+	}
+
+	node = fs.findNode(path)
+
+	if node == nil {
+		return nil, memFilesystemErrorNotFound
+	}
+
+	reader = bytes.NewBufferString(node.contents)
+
+	return ioutil.NopCloser(reader), nil
+}
+
+func (fs *memFilesystem) StatFile(path string) (os.FileInfo, error) {
+	var node *memFilesystemNode
+
+	if fs.statFileError != nil {
+		if fs.panic {
+			panic(fs.statFileError)
+		}
+
+		return nil, fs.statFileError
+	}
+
+	node = fs.findNode(path)
+
+	if node == nil {
+		return nil, memFilesystemErrorNotFound
+	}
+
+	return node, nil
+}
+
+func (fs *memFilesystem) findNode(path string) *memFilesystemNode {
+	var curNode = fs.root
+	var split []string
+
+	if path == "" || path == "/" {
+		return fs.root
+	}
+
+	split = strings.Split(path, "/")
+
+	if split[0] == "" {
+		split = split[1:]
+	}
+
+	for _, segment := range split {
+		curNode = curNode.children[segment]
+
+		if curNode == nil {
+			return nil
+		} else {
+			// So we don't have to redundantly specify the name when we're creating memFilesystemNode literals in our
+			// testcases.
+
+			curNode.name = segment
+		}
+	}
+
+	return curNode
+}
+
+// In-memory Filesystem node.
+type memFilesystemNode struct {
+	children map[string]*memFilesystemNode
+	contents string
+	name     string
+}
+
+func (node *memFilesystemNode) Name() string {
+	return node.name
+}
+
+func (node *memFilesystemNode) Size() int64 {
+	return 0
+}
+
+func (node *memFilesystemNode) Mode() os.FileMode {
+	return os.ModePerm
+}
+
+func (node *memFilesystemNode) ModTime() time.Time {
+	return time.Now()
+}
+
+func (node *memFilesystemNode) IsDir() bool {
+	return len(node.children) > 0
+}
+
+func (node *memFilesystemNode) Sys() interface{} {
+	return nil
 }
 
 // Test FileEvaluator implementation
@@ -185,47 +383,15 @@ func (evaluator *testFileEvaluator) ShouldKeep(file File) (bool, error) {
 	return true, nil
 }
 
-// Test FileProducer implementation
-type testFileProducer struct {
-	destroyError error
-	files        []File
-	index        int
-	nextError    error
-}
+//
+// Private variables
+//
 
-func (producer *testFileProducer) Destroy() error {
-	if producer.destroyError != nil {
-		return producer.destroyError
-	}
-
-	return nil
-}
-
-func (producer *testFileProducer) Next() (File, error) {
-	producer.index++
-
-	if producer.index == len(producer.files) {
-		if producer.nextError != nil {
-			return nil, producer.nextError
-		}
-
-		return nil, nil
-	}
-
-	if producer.index > len(producer.files) {
-		return nil, nil
-	}
-
-	return producer.files[producer.index], nil
-}
+var memFilesystemErrorNotFound = fmt.Errorf("path not found")
 
 //
 // Private functions
 //
-
-func newSimpleFileProducer(prefix string, size int) FileProducer {
-	return newTestFileProducer(prefix, size, nil, nil)
-}
 
 func newTestFileEvaluator(maxEvaluations int, destroyError, keepError error) FileEvaluator {
 	return &testFileEvaluator{
@@ -233,23 +399,6 @@ func newTestFileEvaluator(maxEvaluations int, destroyError, keepError error) Fil
 		index:          -1,
 		keepError:      keepError,
 		maxEvaluations: maxEvaluations,
-	}
-}
-
-func newTestFileProducer(prefix string, size int, destroyError, nextError error) FileProducer {
-	var files = make([]File, size)
-
-	for i := 0; i < size; i++ {
-		files[i] = &testFile{
-			path: newTestFilePath(fmt.Sprintf("%s%d", prefix, i)),
-		}
-	}
-
-	return &testFileProducer{
-		destroyError: destroyError,
-		files:        files,
-		index:        -1,
-		nextError:    nextError,
 	}
 }
 

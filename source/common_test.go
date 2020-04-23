@@ -1,8 +1,6 @@
 package source // import "golang.handcraftedbits.com/pipewerx/source"
 
 import (
-	"encoding/json"
-	"errors"
 	"io"
 	"io/ioutil"
 	"os"
@@ -10,7 +8,6 @@ import (
 	"testing"
 
 	"golang.handcraftedbits.com/pipewerx"
-	"golang.handcraftedbits.com/pipewerx/internal/client"
 	"golang.handcraftedbits.com/pipewerx/internal/testutil"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -22,20 +19,6 @@ import (
 
 func TestMain(m *testing.M) {
 	var code int
-	var contents []byte
-	var err error
-
-	contents, err = ioutil.ReadFile("testdata/sourceTests.json")
-
-	if err != nil {
-		panic(err)
-	}
-
-	err = json.Unmarshal(contents, &fileProducerTests)
-
-	if err != nil {
-		panic(err)
-	}
 
 	docker = testutil.NewDocker("")
 
@@ -50,124 +33,217 @@ func TestMain(m *testing.M) {
 // Private types
 //
 
-type expectedResult struct {
-	Contents string `json:"contents"`
-	Path     string `json:"path"`
+type testSourceConfig struct {
+	createFunc    func(root string, recurse bool) (pipewerx.Source, error)
+	name          string
+	pathSeparator string
+	realPath      func(string, string) string
 }
-
-type fileProducerTest struct {
-	Description   string           `json:"description"`
-	PathsToCreate []string         `json:"pathsToCreate"`
-	Recurse       bool             `json:"recurse"`
-	Results       []expectedResult `json:"results"`
-	Root          string           `json:"root"`
-}
-
-type fileProducerBuilderFunc func(*pathStepper) pipewerx.FileProducer
-type filesystemBuilderFunc func() client.Filesystem
-type sourceBuilderFunc func(string, bool) pipewerx.Source
 
 //
 // Private variables
 //
 
-var (
-	docker            *testutil.Docker
-	fileProducerTests []fileProducerTest
-	testDataRoot      = "testdata/fileProducer/"
-)
+var docker *testutil.Docker
 
 //
 // Private functions
 //
 
-func expectResultsForRoot(source pipewerx.Source, fs client.Filesystem, expected []expectedResult) {
-	var expectedMap = make(map[string]string)
+func collectSourceResults(source pipewerx.Source) []pipewerx.Result {
 	var in <-chan pipewerx.Result
 	var results = make([]pipewerx.Result, 0)
 
-	in, _ = source.Files(pipewerx.NewContext())
+	in, _ = source.Files(pipewerx.NewContext(pipewerx.ContextConfig{}))
 
 	for result := range in {
-		So(result.Error(), ShouldBeNil)
-		So(result.File(), ShouldNotBeNil)
-
 		results = append(results, result)
 	}
 
-	for _, value := range expected {
-		// The expectation is that all paths in expectedResult use '/', so for filesystems that have a different
-		// separator we have to replace all occurrences.
+	return results
+}
 
-		expectedMap[strings.ReplaceAll(value.Path, "/", fs.PathSeparator())] = value.Contents
+func expectFilesInResults(results []pipewerx.Result, separator string, paths []string, contents []string) {
+	var contentMap = make(map[string]string)
+	var pathMap = make(map[string]bool)
+
+	for i, path := range paths {
+		// For simplicity's sake we're using '/' as a path separator, but that might not be true for all filesystems.
+		// To address that, replace all '/' with the correct path separator before adding to the map.
+
+		path = strings.ReplaceAll(path, "/", separator)
+
+		pathMap[path] = true
+
+		if contents != nil {
+			contentMap[path] = contents[i]
+		}
 	}
 
-	So(results, ShouldHaveLength, len(expected))
-
 	for _, result := range results {
-		var contents []byte
-		var err error
-		var reader io.ReadCloser
-
 		So(result.Error(), ShouldBeNil)
-		So(result.File(), ShouldNotBeNil)
-		So(expectedMap, ShouldContainKey, result.File().Path().String())
+		So(pathMap, ShouldContainKey, result.File().Path().String())
 
-		reader, err = result.File().Reader()
+		if contents != nil {
+			var err error
+			var fileContents []byte
+			var reader io.ReadCloser
 
-		So(err, ShouldBeNil)
-		So(reader, ShouldNotBeNil)
+			So(contentMap, ShouldContainKey, result.File().Path().String())
 
-		contents, err = ioutil.ReadAll(reader)
+			reader, err = result.File().Reader()
 
-		So(err, ShouldBeNil)
-		So(expectedMap[result.File().Path().String()], ShouldEqual, string(contents))
+			So(err, ShouldBeNil)
+			So(reader, ShouldNotBeNil)
 
-		err = reader.Close()
+			fileContents, err = ioutil.ReadAll(reader)
 
-		So(err, ShouldBeNil)
+			So(err, ShouldBeNil)
+			So(fileContents, ShouldNotBeNil)
+
+			err = reader.Close()
+
+			So(err, ShouldBeNil)
+			So(string(fileContents), ShouldEqual, contentMap[result.File().Path().String()])
+		}
 	}
 }
 
-func testFileProducer(fsPrefix string, sourceBuilder sourceBuilderFunc, fileProducer fileProducerBuilderFunc,
-	filesystem filesystemBuilderFunc) {
-	Convey("it should produce correct Results", func() {
-		for _, test := range fileProducerTests {
-			Convey("when "+test.Description, func() {
-				var source pipewerx.Source
+func mustCreateSource(config testSourceConfig, root string, recurse bool) pipewerx.Source {
+	var err error
+	var source pipewerx.Source
 
-				for _, path := range test.PathsToCreate {
-					var err = os.MkdirAll(testDataRoot+test.Root+"/"+path, 0775)
+	source, err = config.createFunc(root, recurse)
 
-					So(err, ShouldBeNil)
-				}
+	So(err, ShouldBeNil)
+	So(source, ShouldNotBeNil)
 
-				source = sourceBuilder(fsPrefix+test.Root, test.Recurse)
+	return source
+}
 
-				expectResultsForRoot(source, filesystem(), test.Results)
+func testSource(t *testing.T, config testSourceConfig) {
+	Convey("When creating "+config.name+" Source", t, func() {
+		var results []pipewerx.Result
+		var root string
+
+		Convey("calling Files should return the expected values", func() {
+			Convey("when an empty directory is used as the root", func() {
+				root = config.realPath(testutil.TestdataPathFilesystem, "emptyDir")
+
+				Convey("and recursion is enabled", func() {
+					results = collectSourceResults(mustCreateSource(config, root, true))
+
+					expectFilesInResults(results, config.pathSeparator, []string{}, nil)
+				})
+
+				Convey("and recursion is disabled", func() {
+					results = collectSourceResults(mustCreateSource(config, root, false))
+
+					expectFilesInResults(results, config.pathSeparator, []string{}, nil)
+				})
 			})
-		}
-	})
 
-	Convey("it should return an error", func() {
-		Convey("when an error occurs while stepping through files", func() {
-			var err error
-			var file pipewerx.File
-			var listFilesError = errors.New("listFiles")
-			var stepper *pathStepper
+			Convey("when a directory containing multiple empty directories is used as the root", func() {
+				root = config.realPath(testutil.TestdataPathFilesystem, "multipleEmptyDirs")
 
-			stepper, err = newPathStepper(filesystem(), fsPrefix+"singleLevelSubdirs", true)
+				Convey("and recursion is enabled", func() {
+					results = collectSourceResults(mustCreateSource(config, root, true))
 
-			So(err, ShouldBeNil)
-			So(stepper, ShouldNotBeNil)
+					expectFilesInResults(results, config.pathSeparator, []string{}, nil)
+				})
 
-			stepper.fs = newErrorFilesystem(stepper.fs, nil, listFilesError)
+				Convey("and recursion is disabled", func() {
+					results = collectSourceResults(mustCreateSource(config, root, false))
 
-			file, err = fileProducer(stepper).Next()
+					expectFilesInResults(results, config.pathSeparator, []string{}, nil)
+				})
+			})
 
-			So(file, ShouldBeNil)
-			So(err, ShouldNotBeNil)
-			So(err.Error(), ShouldEqual, "listFiles")
+			Convey("when a single file is used as the root", func() {
+				root = config.realPath(testutil.TestdataPathFilesystem, "fileOnly.test")
+
+				Convey("and recursion is enabled", func() {
+					results = collectSourceResults(mustCreateSource(config, root, true))
+
+					expectFilesInResults(results, config.pathSeparator, []string{"fileOnly.test"}, []string{"fileOnly"})
+				})
+
+				Convey("and recursion is disabled", func() {
+					results = collectSourceResults(mustCreateSource(config, root, false))
+
+					expectFilesInResults(results, config.pathSeparator, []string{"fileOnly.test"}, []string{"fileOnly"})
+				})
+			})
+
+			Convey("when there are no subdirectories", func() {
+				root = config.realPath(testutil.TestdataPathFilesystem, "filesOnly")
+
+				Convey("and recursion is enabled", func() {
+					results = collectSourceResults(mustCreateSource(config, root, true))
+
+					expectFilesInResults(results, config.pathSeparator, []string{"a.test", "b.test", "c.test"},
+						[]string{"a", "b", "c"})
+				})
+
+				Convey("and recursion is disabled", func() {
+					results = collectSourceResults(mustCreateSource(config, root, false))
+
+					expectFilesInResults(results, config.pathSeparator, []string{"a.test", "b.test", "c.test"},
+						[]string{"a", "b", "c"})
+				})
+			})
+
+			Convey("when there is a single level of subdirectories", func() {
+				root = config.realPath(testutil.TestdataPathFilesystem, "singleLevelSubdirs")
+
+				Convey("and recursion is enabled", func() {
+					results = collectSourceResults(mustCreateSource(config, root, true))
+
+					expectFilesInResults(results, config.pathSeparator, []string{"a/a.test", "b/b.test", "c/c.test"},
+						[]string{"a", "b", "c"})
+				})
+
+				Convey("and recursion is disabled", func() {
+					results = collectSourceResults(mustCreateSource(config, root, false))
+
+					expectFilesInResults(results, config.pathSeparator, []string{}, nil)
+				})
+			})
+
+			Convey("when there are multiple levels of subdirectories", func() {
+				root = config.realPath(testutil.TestdataPathFilesystem, "multiLevelSubdirs")
+
+				Convey("and recursion is enabled", func() {
+					results = collectSourceResults(mustCreateSource(config, root, true))
+
+					expectFilesInResults(results, config.pathSeparator, []string{"a/a.test", "b/c/c.test",
+						"d/e/f/f.test"}, []string{"a", "c", "f"})
+				})
+
+				Convey("and recursion is disabled", func() {
+					results = collectSourceResults(mustCreateSource(config, root, false))
+
+					expectFilesInResults(results, config.pathSeparator, []string{}, nil)
+				})
+			})
+
+			Convey("when there is a mixture of subdirectory depths", func() {
+				root = config.realPath(testutil.TestdataPathFilesystem, "mixed")
+
+				Convey("and recursion is enabled", func() {
+					results = collectSourceResults(mustCreateSource(config, root, true))
+
+					expectFilesInResults(results, config.pathSeparator, []string{"a.test", "b.test", "c/c.test",
+						"d/e/f/f.test"}, []string{"a", "b", "c", "f"})
+				})
+
+				Convey("and recursion is disabled", func() {
+					results = collectSourceResults(mustCreateSource(config, root, false))
+
+					expectFilesInResults(results, config.pathSeparator, []string{"a.test", "b.test"},
+						[]string{"a", "b"})
+				})
+			})
 		})
 	})
 }

@@ -3,7 +3,6 @@ package testutil // import "golang.handcraftedbits.com/pipewerx/internal/testuti
 import (
 	"fmt"
 	"net"
-	"path/filepath"
 	"strconv"
 	"sync"
 
@@ -117,6 +116,8 @@ func (run *DockerRun) AsRunOptions() *dockertest.RunOptions {
 
 		for key, value := range run.Env {
 			options.Env[i] = fmt.Sprintf("%s=%s", key, value)
+
+			i++
 		}
 	}
 
@@ -127,6 +128,8 @@ func (run *DockerRun) AsRunOptions() *dockertest.RunOptions {
 
 		for key, value := range run.Volumes {
 			options.Mounts[i] = fmt.Sprintf("%s:%s", key, value)
+
+			i++
 		}
 	}
 
@@ -152,14 +155,9 @@ func NewDocker(endpoint string) *Docker {
 	return docker
 }
 
-func StartSambaContainer(docker *Docker, localPath string, pingFunc func(int) error) int {
-	var absPath string
+func StartSambaContainer(docker *Docker, absPath string, pingFunc func(int) error) int {
 	var err error
 	var port int
-
-	absPath, err = filepath.Abs(localPath)
-
-	So(err, ShouldBeNil)
 
 	err = docker.Run(&DockerRun{
 		Args: []string{

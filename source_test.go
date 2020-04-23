@@ -2,6 +2,7 @@ package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 
 import (
 	"errors"
+	"sync"
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -13,183 +14,270 @@ import (
 
 // mergedSource tests
 
-func TestMergedSource_Items(t *testing.T) {
-	Convey("When creating a merged Source", t, func() {
-		Convey("it should produce an error Result when an initialization error occurs", func() {
-			var in <-chan Result
-			var index = -1
-			var results = make([]Result, 0)
-			var source = newMergedSource([]Source{newSimpleSource("simple", "/a/b", 5),
-				newErrorSource("init", "/a/b", 5, true, false, false)})
+func TestMergedSource(t *testing.T) {
+	Convey("When creating a mergedSource", t, func() {
+		Convey("which contains a number of Sources, each of which have a Filesystem that does nothing when destroyed",
+			func() {
+				var err error
+				var merged Source
+				var source [2]Source
 
-			in, _ = source.Files(NewContext())
+				source[0], err = NewSource(SourceConfig{}, &memFilesystem{
+					root: &memFilesystemNode{
+						children: map[string]*memFilesystemNode{
+							"file1": {},
+						},
+					},
+				})
 
-			for result := range in {
-				results = append(results, result)
-			}
+				So(err, ShouldBeNil)
+				So(source[0], ShouldNotBeNil)
 
-			So(len(results), ShouldBeGreaterThanOrEqualTo, 1)
+				source[1], err = NewSource(SourceConfig{}, &memFilesystem{
+					root: &memFilesystemNode{
+						children: map[string]*memFilesystemNode{
+							"file2": {},
+						},
+					},
+				})
 
-			for i, result := range results {
-				if result.Error() != nil {
-					index = i
+				So(err, ShouldBeNil)
+				So(source[1], ShouldNotBeNil)
 
-					break
-				}
-			}
+				merged, err = newMergedSource([]Source{source[0], source[1]})
 
-			So(index, ShouldNotEqual, -1)
-			So(results[index].File(), ShouldBeNil)
-			So(results[index].Error(), ShouldNotBeNil)
-			So(results[index].Error().Error(), ShouldEqual, "init")
-		})
+				So(err, ShouldBeNil)
+				So(merged, ShouldNotBeNil)
 
-		Convey("it should produce an error Result when a destruction error occurs", func() {
-			var in <-chan Result
-			var index = -1
-			var results = make([]Result, 0)
-			var source = newMergedSource([]Source{newSimpleSource("simple", "/a/b", 5),
-				newErrorSource("destroy", "/a/b", 5, false, true, false)})
+				Convey("calling destroy should return nil", func() {
+					So(merged.destroy(), ShouldEqual, nil)
+				})
+			})
 
-			in, _ = source.Files(NewContext())
+		Convey("which contains a number of Sources, most of which have a Filesystem that performs an action when "+
+			"destroyed", func() {
+			var err error
+			var expected = []string{"file01", "file02", "file03", "file04", "file05", "file06", "file07", "file08",
+				"file09", "file10", "file11", "file12", "file13", "file14", "file15"}
+			var merged Source
+			var source [3]Source
 
-			for result := range in {
-				results = append(results, result)
-			}
+			source[0], err = NewSource(SourceConfig{
+				Name: "source1",
+			}, &memFilesystem{
+				destroy: func() error {
+					return errors.New("source1")
+				},
+				root: &memFilesystemNode{
+					children: map[string]*memFilesystemNode{
+						"file01": {},
+						"file02": {},
+						"file03": {},
+						"file04": {},
+						"file05": {},
+					},
+				},
+			})
 
-			So(len(results), ShouldBeGreaterThanOrEqualTo, 1)
+			So(err, ShouldBeNil)
+			So(source[0], ShouldNotBeNil)
 
-			for i, result := range results {
-				if result.Error() != nil {
-					index = i
+			source[1], err = NewSource(SourceConfig{
+				Name: "source2",
+			}, &memFilesystem{
+				destroy: func() error {
+					return errors.New("source2")
+				},
+				root: &memFilesystemNode{
+					children: map[string]*memFilesystemNode{
+						"file06": {},
+						"file07": {},
+						"file08": {},
+						"file09": {},
+						"file10": {},
+					},
+				},
+			})
 
-					break
-				}
-			}
+			So(err, ShouldBeNil)
+			So(source[1], ShouldNotBeNil)
 
-			So(index, ShouldNotEqual, -1)
-			So(results[index].File(), ShouldBeNil)
-			So(results[index].Error(), ShouldNotBeNil)
-			So(results[index].Error().Error(), ShouldEqual, "destroy")
-		})
+			source[2], err = NewSource(SourceConfig{
+				Name: "source3",
+			}, &memFilesystem{
+				root: &memFilesystemNode{
+					children: map[string]*memFilesystemNode{
+						"file11": {},
+						"file12": {},
+						"file13": {},
+						"file14": {},
+						"file15": {},
+					},
+				},
+			})
 
-		Convey("it should be able to produce all Results when no errors occur", func() {
-			var in <-chan Result
-			var results = make(map[string]bool)
-			var source = newSimpleMergedSource(3)
+			So(err, ShouldBeNil)
+			So(source[2], ShouldNotBeNil)
 
-			in, _ = source.Files(NewContext())
+			merged, err = newMergedSource([]Source{source[0], source[1], source[2]})
 
-			for result := range in {
-				So(result.Error(), ShouldBeNil)
-				So(result.File(), ShouldNotBeNil)
+			So(err, ShouldBeNil)
+			So(merged, ShouldNotBeNil)
 
-				results[result.File().Path().String()] = true
-			}
+			Convey("calling Destroy should return the expected value", func() {
+				var multiErr MultiError
 
-			// Use the map as a hash set.  Since all the test paths are unique, we should end up with six keys.
+				err = merged.destroy()
 
-			So(results, ShouldHaveLength, 6)
-		})
+				So(err, ShouldNotBeNil)
+				So(err, ShouldImplement, (*MultiError)(nil))
 
-		Convey("it should stop when the Source is terminated", func() {
-			var cancel func()
-			var in <-chan Result
-			var results = make([]Result, 0)
-			var source = newSimpleMergedSource(5)
+				multiErr = err.(MultiError)
 
-			in, cancel = source.Files(NewContext())
+				So(multiErr.Causes(), ShouldHaveLength, 2)
+				So(multiErr.Causes()[0].Error(), ShouldEqual, "source1")
+				So(multiErr.Causes()[1].Error(), ShouldEqual, "source2")
+				So(multiErr.Error(), ShouldEqual, sourceMergedDestroyMessage)
+			})
 
-			results = append(results, <-in)
-			results = append(results, <-in)
+			Convey("calling Files", func() {
+				Convey("should return the expected Results", func() {
+					var results = collectSourceResults(merged)
 
-			cancel()
+					So(results, ShouldHaveLength, 15)
 
-			for result := range in {
-				results = append(results, result)
-			}
+					expectFilePathsInResults(nil, results, expected)
+				})
 
-			So(len(results), ShouldBeGreaterThanOrEqualTo, 2)
-			So(len(results), ShouldBeLessThan, 10)
-		})
-	})
-}
+				Convey("and cancelling should return the expected Results", func(c C) {
+					var cancel CancelFunc
+					var in <-chan Result
+					var results = make([]Result, 0)
+					var wg sync.WaitGroup
 
-func TestMergedSource_Name(t *testing.T) {
-	Convey("When creating a merged Source", t, func() {
-		Convey("it should have the correct name when a nil Source array is provided", func() {
-			var source = newMergedSource(nil)
+					in, cancel = merged.Files(NewContext(ContextConfig{}))
 
-			So(source.Name(), ShouldEqual, "<empty source>")
-		})
+					results = append(results, <-in)
+					results = append(results, <-in)
 
-		Convey("it should have the correct name when a valid Source array is provided", func() {
-			var source = newSimpleMergedSource(3)
+					wg.Add(1)
 
-			So(source.Name(), ShouldEqual, "<merged source>")
+					cancel(func() {
+						var names []string
+
+						for result := range in {
+							results = append(results, result)
+
+							names = append(names, result.File().Path().String())
+						}
+
+						c.So(results, ShouldHaveLength, 2)
+
+						expectFilePathsInResults(c, results, expected)
+
+						wg.Done()
+					})
+
+					wg.Wait()
+				})
+			})
+
+			Convey("calling Name should return the expected name", func() {
+				So(merged.Name(), ShouldEqual, sourceMergedName)
+			})
 		})
 	})
 }
 
 func TestNewMergedSource(t *testing.T) {
-	Convey("When creating a merged Source", t, func() {
-		Convey("providing a nil array of Sources should create an empty Source", func() {
-			var in <-chan Result
-			var results []Result
-			var source = newMergedSource(nil)
+	Convey("When calling newMergedSource", t, func() {
+		Convey("with a nil Source array", func() {
+			var err error
+			var merged Source
 
-			in, _ = source.Files(NewContext())
+			merged, err = newMergedSource(nil)
 
-			for result := range in {
-				results = append(results, result)
-			}
-
-			So(results, ShouldHaveLength, 0)
+			Convey("it should return an error", func() {
+				So(merged, ShouldBeNil)
+				So(err, ShouldNotBeNil)
+				So(errors.Is(err, errSourceNone), ShouldBeTrue)
+			})
 		})
 
-		Convey("providing an array of nil Sources should create an empty Source", func() {
-			var in <-chan Result
-			var results []Result
-			var source = newMergedSource([]Source{nil, nil, nil})
+		Convey("with an empty Source array", func() {
+			var err error
+			var merged Source
 
-			in, _ = source.Files(NewContext())
+			merged, err = newMergedSource([]Source{})
 
-			for result := range in {
-				results = append(results, result)
-			}
-
-			So(results, ShouldHaveLength, 0)
+			Convey("it should return an error", func() {
+				So(merged, ShouldBeNil)
+				So(err, ShouldNotBeNil)
+				So(errors.Is(err, errSourceNone), ShouldBeTrue)
+			})
 		})
 
-		Convey("all nil Sources are removed", func() {
-			var in <-chan Result
-			var results []Result
-			var source = newMergedSource([]Source{nil, newSimpleSource("name", "/a/b", 3), nil})
+		Convey("with a single Source", func() {
+			var err error
+			var merged Source
+			var source Source
 
-			in, _ = source.Files(NewContext())
+			source, err = NewSource(SourceConfig{}, &memFilesystem{})
 
-			for result := range in {
-				results = append(results, result)
-			}
+			So(err, ShouldBeNil)
+			So(source, ShouldNotBeNil)
 
-			So(results, ShouldHaveLength, 3)
+			merged, err = newMergedSource([]Source{source})
+
+			Convey("it should return the same Source", func() {
+				So(err, ShouldBeNil)
+				So(merged, ShouldNotBeNil)
+				So(merged, ShouldEqual, source)
+			})
 		})
 
-		Convey("any duplicate Source references must be removed", func() {
-			var in <-chan Result
-			var mergedSource Source
-			var results []Result
-			var source = newSimpleSource("name", "/a/b", 3)
+		Convey("with duplicate Sources", func() {
+			var err error
+			var merged Source
+			var source1 Source
+			var source2 Source
 
-			mergedSource = newMergedSource([]Source{source, source, source})
+			source1, err = NewSource(SourceConfig{}, &memFilesystem{
+				root: &memFilesystemNode{
+					children: map[string]*memFilesystemNode{
+						"file1": {},
+					},
+				},
+			})
 
-			in, _ = mergedSource.Files(NewContext())
+			So(err, ShouldBeNil)
+			So(source1, ShouldNotBeNil)
 
-			for result := range in {
-				results = append(results, result)
-			}
+			source2, err = NewSource(SourceConfig{}, &memFilesystem{
+				root: &memFilesystemNode{
+					children: map[string]*memFilesystemNode{
+						"file2": {},
+					},
+				},
+			})
 
-			So(results, ShouldHaveLength, 3)
+			So(err, ShouldBeNil)
+			So(source2, ShouldNotBeNil)
+
+			merged, err = newMergedSource([]Source{source1, source2, source1, source2})
+
+			Convey("it should discard the duplicates", func() {
+				var results []Result
+
+				So(err, ShouldBeNil)
+				So(merged, ShouldNotBeNil)
+
+				results = collectSourceResults(merged)
+
+				So(results, ShouldHaveLength, 2)
+
+				expectFilePathsInResults(nil, results, []string{"file1", "file2"})
+			})
 		})
 	})
 }
@@ -197,140 +285,163 @@ func TestNewMergedSource(t *testing.T) {
 // Source tests
 
 func TestNewSource(t *testing.T) {
-	Convey("When creating a Source with a nil FileProducer function", t, func() {
-		var source = NewSource("source", nil)
+	Convey("When calling NewSource", t, func() {
+		Convey("with a nil Filesystem", func() {
+			Convey("it should return an error", func() {
+				var err error
+				var source Source
 
-		Convey("it should produce no Results", func() {
-			var in <-chan Result
-			var results []Result
+				source, err = NewSource(SourceConfig{}, nil)
 
-			in, _ = source.Files(NewContext())
-
-			for result := range in {
-				results = append(results, result)
-			}
-
-			So(results, ShouldHaveLength, 0)
-		})
-	})
-
-	Convey("When creating a Source with a FileProducer function that returns nil", t, func() {
-		var source = NewSource("source", func(Context) (FileProducer, error) {
-			return nil, nil
+				So(source, ShouldBeNil)
+				So(err, ShouldNotBeNil)
+				So(errors.Is(err, errSourceNilFilesystem), ShouldBeTrue)
+			})
 		})
 
-		Convey("it should produce a single error Result", func() {
-			var in <-chan Result
-			var results = make([]Result, 0)
+		Convey("with a valid Filesystem", func() {
+			Convey("it should not return an error", func() {
+				var err error
+				var source Source
 
-			in, _ = source.Files(NewContext())
+				source, err = NewSource(SourceConfig{}, &memFilesystem{})
 
-			for result := range in {
-				results = append(results, result)
-			}
-
-			So(results, ShouldHaveLength, 1)
-			So(results[0].File(), ShouldBeNil)
-			So(results[0].Error(), ShouldNotBeNil)
+				So(err, ShouldBeNil)
+				So(source, ShouldNotBeNil)
+			})
 		})
 	})
 }
 
-func TestSource_Items(t *testing.T) {
+func TestSource(t *testing.T) {
 	Convey("When creating a Source", t, func() {
-		Convey("it should produce an error Result when an initialization error occurs", func() {
-			var in <-chan Result
-			var results = make([]Result, 0)
-			var source = newErrorSource("init", "/a/b", 5, true, false, false)
+		Convey("which fails immediately upon access and has a Filesystem which performs no action when destroyed",
+			func() {
+				var err error
+				var source Source
 
-			in, _ = source.Files(NewContext())
+				source, err = NewSource(SourceConfig{}, &memFilesystem{
+					absolutePathError: errors.New("absolutePath"),
+				})
 
-			for result := range in {
-				results = append(results, result)
-			}
+				So(err, ShouldBeNil)
+				So(source, ShouldNotBeNil)
 
-			So(len(results), ShouldEqual, 1)
-			So(results[0].File(), ShouldBeNil)
-			So(results[0].Error(), ShouldNotBeNil)
-			So(results[0].Error().Error(), ShouldEqual, "init")
+				Convey("calling destroy should not perform any action", func() {
+					So(source.destroy(), ShouldBeNil)
+				})
+
+				Convey("calling Files should return an error", func() {
+					var results = collectSourceResults(source)
+
+					So(results, ShouldHaveLength, 1)
+					So(results[0].File(), ShouldBeNil)
+					So(results[0].Error(), ShouldNotBeNil)
+					So(results[0].Error().Error(), ShouldEqual, "absolutePath")
+				})
+			})
+
+		Convey("which contains a number of files and has a Filesystem which performs an action when destroyed", func() {
+			var err error
+			var source Source
+
+			source, err = NewSource(SourceConfig{
+				Name:    "source",
+				Recurse: true,
+			}, &memFilesystem{
+				destroy: func() error {
+					return errors.New("destroy")
+				},
+				root: &memFilesystemNode{
+					children: map[string]*memFilesystemNode{
+						"dir1": {
+							children: map[string]*memFilesystemNode{
+								"file1": {},
+							},
+						},
+						"dir2": {
+							children: map[string]*memFilesystemNode{
+								"file2": {},
+							},
+						},
+						"file": {},
+					},
+				},
+			})
+
+			So(err, ShouldBeNil)
+			So(source, ShouldNotBeNil)
+
+			Convey("calling destroy should return the expected value", func() {
+				err = source.destroy()
+
+				So(err, ShouldNotBeNil)
+				So(err.Error(), ShouldEqual, "destroy")
+			})
+
+			Convey("calling Files", func() {
+				Convey("should return the expected Results", func() {
+					var results = collectSourceResults(source)
+
+					So(results, ShouldHaveLength, 3)
+
+					expectFilePathsInResults(nil, results, []string{"file", "dir1/file1", "dir2/file2"})
+				})
+
+				Convey("and cancelling should return the expected Results", func(c C) {
+					var cancel CancelFunc
+					var in <-chan Result
+					var results = make([]Result, 0)
+					var wg sync.WaitGroup
+
+					in, cancel = source.Files(NewContext(ContextConfig{}))
+
+					results = append(results, <-in)
+					results = append(results, <-in)
+
+					wg.Add(1)
+
+					cancel(func() {
+						for result := range in {
+							results = append(results, result)
+						}
+
+						c.So(results, ShouldHaveLength, 2)
+
+						expectFilePathsInResults(c, results, []string{"file", "dir1/file1", "dir2/file2"})
+
+						wg.Done()
+					})
+
+					wg.Wait()
+				})
+			})
+
+			Convey("calling Name should return the expected name", func() {
+				So(source.Name(), ShouldEqual, "source")
+			})
 		})
 
-		Convey("it should produce an error Result when a destruction error occurs", func() {
-			var in <-chan Result
-			var index = -1
-			var results = make([]Result, 0)
-			var source = newErrorSource("destroy", "/a/b", 5, false, true, false)
+		Convey("which panics when calling Files", func() {
+			var err error
+			var source Source
 
-			in, _ = source.Files(NewContext())
+			source, err = NewSource(SourceConfig{}, &memFilesystem{
+				absolutePathError: errors.New("absolutePath"),
+				panic:             true,
+			})
 
-			for result := range in {
-				results = append(results, result)
-			}
+			So(err, ShouldBeNil)
+			So(source, ShouldNotBeNil)
 
-			So(len(results), ShouldBeGreaterThanOrEqualTo, 1)
+			Convey("calling Files should return an error instead of throwing a panic", func() {
+				var results = collectSourceResults(source)
 
-			for i, result := range results {
-				if result.Error() != nil {
-					index = i
-
-					break
-				}
-			}
-
-			So(index, ShouldNotEqual, -1)
-			So(results[index].File(), ShouldBeNil)
-			So(results[index].Error(), ShouldNotBeNil)
-			So(results[index].Error().Error(), ShouldEqual, "destroy")
-		})
-
-		Convey("it should be able to produce all Results when no errors occur", func() {
-			var in <-chan Result
-			var results = make(map[string]bool)
-			var source = newSimpleSource("simple", "/a/b", 3)
-
-			in, _ = source.Files(NewContext())
-
-			for result := range in {
-				So(result.Error(), ShouldBeNil)
-				So(result.File(), ShouldNotBeNil)
-
-				results[result.File().Path().String()] = true
-			}
-
-			// Use the map as a hash set.  Since all the test paths are unique, we should end up with three keys.
-
-			So(results, ShouldHaveLength, 3)
-		})
-
-		Convey("it should stop when the Source is terminated", func() {
-			var cancel func()
-			var in <-chan Result
-			var results = make([]Result, 0)
-			var source = newSimpleSource("simple", "/a/b", 10)
-
-			in, cancel = source.Files(NewContext())
-
-			results = append(results, <-in)
-			results = append(results, <-in)
-
-			cancel()
-
-			for result := range in {
-				results = append(results, result)
-			}
-
-			So(len(results), ShouldBeGreaterThanOrEqualTo, 2)
-			So(len(results), ShouldBeLessThan, 10)
-		})
-	})
-}
-
-func TestSource_Name(t *testing.T) {
-	Convey("When creating a Source", t, func() {
-		var source = NewSource("name", nil)
-
-		Convey("it should have the correct name", func() {
-			So(source.Name(), ShouldEqual, "name")
+				So(results, ShouldHaveLength, 1)
+				So(results[0].File(), ShouldBeNil)
+				So(results[0].Error(), ShouldNotBeNil)
+				So(results[0].Error().Error(), ShouldEqual, "a fatal error occurred: absolutePath")
+			})
 		})
 	})
 }
@@ -339,36 +450,35 @@ func TestSource_Name(t *testing.T) {
 // Private functions
 //
 
-func newErrorSource(name, pathPrefix string, size int, duringCreate, duringDestroy, duringProduce bool) Source {
-	var destroyError error
-	var produceError error
+func collectSourceResults(source Source) []Result {
+	var in <-chan Result
+	var results = make([]Result, 0)
 
-	if duringCreate {
-		return NewSource(name, func(Context) (FileProducer, error) {
-			return nil, errors.New(name)
-		})
+	in, _ = source.Files(NewContext(ContextConfig{}))
+
+	for result := range in {
+		results = append(results, result)
 	}
 
-	if duringDestroy {
-		destroyError = errors.New(name)
-	}
-
-	if duringProduce {
-		produceError = errors.New(name)
-	}
-
-	return NewSource(name, func(Context) (FileProducer, error) {
-		return newTestFileProducer(pathPrefix, size, destroyError, produceError), nil
-	})
+	return results
 }
 
-func newSimpleMergedSource(size int) Source {
-	return newMergedSource([]Source{newSimpleSource("first", "/first", size),
-		newSimpleSource("second", "/second", size)})
-}
+func expectFilePathsInResults(c C, results []Result, paths []string) {
+	var pathMap = make(map[string]bool)
 
-func newSimpleSource(name, pathPrefix string, numFiles int) Source {
-	return NewSource(name, func(Context) (FileProducer, error) {
-		return newSimpleFileProducer(pathPrefix, numFiles), nil
-	})
+	for _, path := range paths {
+		pathMap[path] = true
+	}
+
+	if c == nil {
+		for _, result := range results {
+			So(result.Error(), ShouldBeNil)
+			So(pathMap, ShouldContainKey, result.File().Path().String())
+		}
+	} else {
+		for _, result := range results {
+			c.So(result.Error(), ShouldBeNil)
+			c.So(pathMap, ShouldContainKey, result.File().Path().String())
+		}
+	}
 }

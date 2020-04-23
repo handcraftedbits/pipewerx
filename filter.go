@@ -1,9 +1,5 @@
 package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 
-import (
-	"errors"
-)
-
 //
 // Public types
 //
@@ -12,22 +8,33 @@ type Filter interface {
 	Source
 }
 
+type FilterConfig struct {
+	Name string
+}
+
 //
 // Public functions
 //
 
-func NewFilter(name string, newEvaluator NewFileEvaluatorFunc, sources []Source) Filter {
-	if newEvaluator == nil {
-		newEvaluator = func(Context) (FileEvaluator, error) {
-			return &nilFileEvaluator{}, nil
-		}
+func NewFilter(config FilterConfig, sources []Source, evaluator FileEvaluator) (Filter, error) {
+	var err error
+	var merged Source
+
+	if evaluator == nil {
+		evaluator = &nilFileEvaluator{}
+	}
+
+	merged, err = newMergedSource(sources)
+
+	if err != nil {
+		return nil, err
 	}
 
 	return &filter{
-		input:        newMergedSource(sources),
-		name:         name,
-		newEvaluator: newEvaluator,
-	}
+		config:    config,
+		evaluator: evaluator,
+		input:     merged,
+	}, nil
 }
 
 //
@@ -36,76 +43,67 @@ func NewFilter(name string, newEvaluator NewFileEvaluatorFunc, sources []Source)
 
 // Filter implementation
 type filter struct {
-	input        Source
-	name         string
-	newEvaluator func(Context) (FileEvaluator, error)
+	config    FilterConfig
+	evaluator FileEvaluator
+	input     Source
 }
 
-func (f *filter) Files(context Context) (<-chan Result, func()) {
+func (f *filter) destroy() error {
+	return f.evaluator.Destroy()
+}
+
+func (f *filter) Files(context Context) (<-chan Result, CancelFunc) {
 	var cancel = make(chan struct{})
+	var cancelHelper *cancellationHelper
 	var out = make(chan Result)
+
+	cancelHelper = newCancellationHelper(context.Log(), out, cancel, nil)
 
 	go func() {
 		var err error
-		var evaluator FileEvaluator
 		var in <-chan Result
-		var sourceCancel func()
+		var sourceCancel CancelFunc
 
-		defer func() {
-			if evaluator != nil {
-				if err := evaluator.Destroy(); err != nil {
-					out <- newResult(nil, err)
-				}
-			}
-
-			close(out)
-			close(cancel)
-		}()
-
-		if evaluator, err = f.newEvaluator(context); err != nil {
-			out <- newResult(nil, err)
-
-			return
-		}
-
-		if evaluator == nil {
-			out <- newResult(nil, errors.New("nil FileEvaluator was created"))
-
-			return
-		}
+		defer cancelHelper.finalize()
 
 		in, sourceCancel = f.input.Files(context)
 
-		for result := range in {
-			select {
-			case <-cancel:
-				sourceCancel()
+		for res := range in {
+			var keep bool
 
-				return
+			if res.Error() == nil {
+				func() {
+					defer func() {
+						if value := recover(); value != nil {
+							err = newPanicError(value)
+							keep = false
+						}
+					}()
 
-			default:
-				var keep bool
-
-				if result.Error() != nil {
-					out <- newResult(nil, result.Error())
-				}
-
-				keep, err = evaluator.ShouldKeep(result.File())
+					keep, err = f.evaluator.ShouldKeep(res.File())
+				}()
 
 				if err != nil {
-					out <- newResult(nil, err)
+					res = &result{err: err, file: nil}
 				}
+			}
 
-				if keep {
-					out <- result
+			if keep || res.Error() != nil {
+				select {
+				case out <- res:
+
+				case <-cancel:
+					sourceCancel(nil)
+
+					return
 				}
 			}
 		}
 	}()
 
-	return out, func() { cancel <- struct{}{} }
+	return out, cancelHelper.invoker()
 }
 
 func (f *filter) Name() string {
-	return f.name
+	return f.config.Name
 }

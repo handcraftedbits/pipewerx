@@ -1,10 +1,9 @@
-package source
+package source // import "golang.handcraftedbits.com/pipewerx/source"
 
 import (
 	"testing"
 
 	"golang.handcraftedbits.com/pipewerx"
-	"golang.handcraftedbits.com/pipewerx/internal/client"
 	"golang.handcraftedbits.com/pipewerx/internal/testutil"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -14,26 +13,47 @@ import (
 // Testcases
 //
 
-func TestSMBFileProducer_Next(t *testing.T) {
-	Convey("When creating a SMB Source", t, func() {
-		var port = startSambaContainer()
+// SMB Source tests
 
-		testFileProducer("", func(root string, recurse bool) pipewerx.Source {
+func TestNewSMB(t *testing.T) {
+	Convey("When calling NewSMB", t, func() {
+		Convey("it should return an error if an invalid configuration is provided", func() {
+			var config = SMBConfig{
+				Host: "????",
+				Port: -1,
+			}
+			var err error
+			var source pipewerx.Source
+
+			source, err = NewSMB(config)
+
+			So(source, ShouldBeNil)
+			So(err, ShouldNotBeNil)
+		})
+	})
+}
+
+func TestSMB(t *testing.T) {
+	var port int
+
+	Convey("Starting Samba Docker container should succeed", t, func() {
+		port = startSambaContainer()
+	})
+
+	testSource(t, testSourceConfig{
+		createFunc: func(root string, recurse bool) (pipewerx.Source, error) {
 			var config = newSMBConfig(port)
 
-			config.Name = "smb"
 			config.Recurse = recurse
 			config.Root = root
 
 			return NewSMB(config)
-		}, func(stepper *pathStepper) pipewerx.FileProducer {
-			return &smbFileProducer{
-				smbClient: newSMBClient(port),
-				stepper:   stepper,
-			}
-		}, func() client.Filesystem {
-			return newSMBClient(port)
-		})
+		},
+		name:          "an SMB",
+		pathSeparator: "\\",
+		realPath: func(root, path string) string {
+			return path
+		},
 	})
 }
 
@@ -41,16 +61,8 @@ func TestSMBFileProducer_Next(t *testing.T) {
 // Private functions
 //
 
-func newSMBClient(port int) client.SMB {
-	smbClient, err := client.NewSMB(newSMBClientConfig(port))
-
-	So(err, ShouldBeNil)
-
-	return smbClient
-}
-
-func newSMBClientConfig(port int) *client.SMBConfig {
-	return &client.SMBConfig{
+func newSMBConfig(port int) SMBConfig {
+	return SMBConfig{
 		Domain:   testutil.ConstSMBDomain,
 		Host:     "localhost",
 		Password: testutil.ConstSMBPassword,
@@ -60,26 +72,9 @@ func newSMBClientConfig(port int) *client.SMBConfig {
 	}
 }
 
-func newSMBConfig(port int) *SMBConfig {
-	var config = newSMBClientConfig(port)
-
-	return &SMBConfig{
-		Domain:   config.Domain,
-		Host:     config.Host,
-		Password: config.Password,
-		Port:     config.Port,
-		Share:    config.Share,
-		Username: config.Username,
-	}
-}
-
 func startSambaContainer() int {
-	return testutil.StartSambaContainer(docker, testDataRoot, func(hostPort int) error {
-		smbClient, clientError := client.NewSMB(newSMBClientConfig(hostPort))
-
-		if smbClient != nil {
-			smbClient.Disconnect()
-		}
+	return testutil.StartSambaContainer(docker, testutil.TestdataPathFilesystem, func(hostPort int) error {
+		_, clientError := NewSMB(newSMBConfig(hostPort))
 
 		return clientError
 	})
