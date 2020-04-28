@@ -26,13 +26,14 @@ func init() {
 	TestdataPathFilesystem, _ = filepath.Abs(".")
 
 	// Kind of hacky.  We want to share testdata/filesystem between internal/filesystem and source, but that means the
-	// current directory could be two different things depending on which test was launched.  So, try to work around
-	// that.
+	// current directory could be different things depending on which test was launched.  So, try to work around that.
 
 	if strings.HasSuffix(TestdataPathFilesystem, "filesystem") {
 		TestdataPathFilesystem, _ = filepath.Abs("../testdata/filesystem")
-	} else {
+	} else if strings.HasSuffix(TestdataPathFilesystem, "source") {
 		TestdataPathFilesystem, _ = filepath.Abs("../internal/testdata/filesystem")
+	} else {
+		TestdataPathFilesystem, _ = filepath.Abs("../testdata/filesystem")
 	}
 
 	// Initialize empty directories under testdata since we can't store them in Git.

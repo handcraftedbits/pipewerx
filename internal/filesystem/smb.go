@@ -1,15 +1,20 @@
 package filesystem // import "golang.handcraftedbits.com/pipewerx/internal/filesystem"
 
+/*
+#cgo pkg-config: smbclient
+
+#include "smb_native.h"
+*/
+import "C"
+
 import (
-	"errors"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	pathutil "path"
 	"strings"
-
-	"github.com/hirochachacha/go-smb2"
+	"time"
+	"unsafe"
 
 	"golang.handcraftedbits.com/pipewerx"
 )
@@ -19,106 +24,75 @@ import (
 //
 
 type SMBConfig struct {
-	Domain   string
-	Host     string
-	Password string
-	Port     int
-	Root     string
-	Share    string
-	Username string
+	Domain               string
+	EnableTestConditions bool
+	Host                 string
+	Password             string
+	Port                 int
+	Root                 string
+	Share                string
+	Username             string
 }
 
 //
-// Public functions
-//
+// Public functions/
 
 func NewSMB(config SMBConfig) (pipewerx.Filesystem, error) {
-	var dialer *smb2.Dialer
+	var cContext *C.SMBCCTX
+	var cDomain = C.CString(config.Domain)
+	var cPassword = C.CString(config.Password)
+	var cUsername = C.CString(config.Username)
 	var err error
-	var fs = &smb{
-		root: config.Root,
-	}
 
-	fs.connection, err = net.Dial("tcp", fmt.Sprintf("%s:%d", config.Host, config.Port))
+	cContext, err = C.pipewerx_smb_create_context(cDomain, cUsername, cPassword, C.bool(config.EnableTestConditions))
 
-	if err != nil {
-		return nil, err
-	}
-
-	dialer = &smb2.Dialer{
-		Initiator: &smb2.NTLMInitiator{
-			Domain:   config.Domain,
-			User:     config.Username,
-			Password: config.Password,
-		},
-	}
-
-	fs.client, err = dialer.Dial(fs.connection)
-
-	if err != nil {
-		// TODO: log.
-		_ = fs.Destroy()
+	if cContext == nil {
+		C.free(unsafe.Pointer(cDomain))
+		C.free(unsafe.Pointer(cPassword))
+		C.free(unsafe.Pointer(cUsername))
 
 		return nil, err
 	}
 
-	fs.remote, err = fs.client.Mount(fmt.Sprintf("\\\\%s\\%s", config.Host, config.Share))
-
-	if err != nil {
-		// TODO: log
-		_ = fs.Destroy()
-
-		return nil, err
-	}
-
-	return fs, nil
+	return &smb{
+		config:   config,
+		cContext: cContext,
+	}, nil
 }
 
 //
 // Private types
 //
 
-// pipewerx.Filesystem implementation for an SMB filesystem
+// SMB pipewerx.Filesystem implementation
 type smb struct {
-	client     *smb2.Client
-	connection net.Conn
-	remote     *smb2.RemoteFileSystem
-	root       string
+	config   SMBConfig
+	cContext *C.SMBCCTX
 }
 
 func (fs *smb) AbsolutePath(path string) (string, error) {
-	path = strings.ReplaceAll(path, smbPathSeparator, "/")
-	path = pathutil.Clean(path)
-
-	return strings.ReplaceAll(path, "/", smbPathSeparator), nil
+	return pathutil.Clean(path), nil
 }
 
 func (fs *smb) BasePart(path string) string {
-	path = strings.ReplaceAll(path, smbPathSeparator, "/")
-
-	return strings.ReplaceAll(pathutil.Base(path), "/", smbPathSeparator)
+	return pathutil.Base(path)
 }
 
 func (fs *smb) Destroy() error {
-	if fs.remote != nil {
-		_ = fs.remote.Umount()
-	}
+	var err error
+	var cRet C.int
 
-	if fs.client != nil {
-		_ = fs.client.Logoff()
-	}
+	cRet, err = C.pipewerx_smb_destroy_context(fs.cContext, C.bool(fs.config.EnableTestConditions))
 
-	if fs.connection != nil {
-		_ = fs.connection.Close()
+	if int(cRet) != 0 {
+		return err
 	}
-
-	// TODO: proper error.
 
 	return nil
 }
 
 func (fs *smb) DirPart(path string) []string {
-	var dir = pathutil.Dir(strings.ReplaceAll(path, smbPathSeparator, "/"))
+	var dir = pathutil.Dir(path)
 
 	if dir == "." {
 		// This will be the case for a single file with no directory component, so return an empty array.
@@ -126,35 +100,51 @@ func (fs *smb) DirPart(path string) []string {
 		return []string{}
 	}
 
-	return strings.Split(dir, "/")
+	return strings.Split(dir, smbPathSeparator)
 }
 
 func (fs *smb) ListFiles(path string) ([]os.FileInfo, error) {
+	var cDirHandle *C.SMBCFILE
+	var cURL = C.CString(fs.makeURL(path, false))
 	var err error
-	var file *smb2.RemoteFile
-	var fileInfos []os.FileInfo
+	var fileInfos = make([]os.FileInfo, 0)
 
-	file, err = fs.remote.Open(path)
+	defer C.free(unsafe.Pointer(cURL))
 
-	if err != nil {
+	cDirHandle, err = C.pipewerx_smb_opendir(fs.cContext, cURL)
+
+	if cDirHandle == nil {
 		return nil, err
 	}
 
-	fileInfos, err = file.Readdir(-1)
+	defer C.pipewerx_smb_closedir(fs.cContext, cDirHandle)
 
-	_ = file.Close()
+	for {
+		var cFileInfo *C.struct_libsmb_file_info
+		var cStat C.struct_stat
+		var name string
 
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			// go-smb2 seems to return this when there's an empty directory.
+		cFileInfo, err = C.pipewerx_smb_readdirplus2(fs.cContext, cDirHandle, &cStat,
+			C.bool(fs.config.EnableTestConditions))
 
-			return []os.FileInfo{}, nil
+		if cFileInfo == nil {
+			if err != nil {
+				return nil, err
+			}
+
+			// No error, so this is simply the end of the listing.
+
+			return fileInfos, nil
 		}
 
-		return nil, err
-	}
+		name = C.GoString(cFileInfo.name)
 
-	return fileInfos, nil
+		// libsmbclient returns "." and "..", which we don't want.  Filter them out.
+
+		if name != "." && name != ".." {
+			fileInfos = append(fileInfos, newSMBFileInfo(C.GoString(cFileInfo.name), &cStat))
+		}
+	}
 }
 
 func (fs *smb) PathSeparator() string {
@@ -162,24 +152,146 @@ func (fs *smb) PathSeparator() string {
 }
 
 func (fs *smb) ReadFile(path string) (io.ReadCloser, error) {
-	// TODO: ugly, gotta be a better way.
-	if fs.root != "" {
-		if fs.BasePart(fs.root) != path {
-			path = fs.root + smbPathSeparator + path
-		} else {
-			path = fs.root
-		}
+	var cFileHandle *C.SMBCFILE
+	var cURL = C.CString(fs.makeURL(path, true))
+	var err error
+
+	defer C.free(unsafe.Pointer(cURL))
+
+	cFileHandle, err = C.pipewerx_smb_open(fs.cContext, cURL, C.int(os.O_RDONLY), C.mode_t(0))
+
+	if cFileHandle == nil {
+		return nil, err
 	}
 
-	return fs.remote.Open(path)
+	return &smbReadCloser{
+		cContext:    fs.cContext,
+		cFileHandle: cFileHandle,
+	}, nil
 }
 
 func (fs *smb) StatFile(path string) (os.FileInfo, error) {
-	return fs.remote.Stat(path)
+	var cRet C.int
+	var cStat C.struct_stat
+	var cURL = C.CString(fs.makeURL(path, false))
+	var err error
+
+	defer C.free(unsafe.Pointer(cURL))
+
+	cRet, err = C.pipewerx_smb_stat(fs.cContext, cURL, &cStat)
+
+	if int(cRet) != 0 {
+		return nil, err
+	}
+
+	return newSMBFileInfo(path, &cStat), nil
+}
+
+func (fs *smb) makeURL(path string, includeRoot bool) string {
+	if includeRoot && (fs.config.Root != "" && fs.config.Root != path) {
+		path = fs.config.Root + smbPathSeparator + path
+	}
+
+	return fmt.Sprintf("smb://%s:%d/%s/%s", fs.config.Host, fs.config.Port, fs.config.Share, pathutil.Clean(path))
+}
+
+// SMB os.FileInfo implementation
+type smbFileInfo struct {
+	mode    os.FileMode
+	modTime time.Time
+	name    string
+	size    int64
+}
+
+func (fileInfo *smbFileInfo) IsDir() bool {
+	return fileInfo.mode.IsDir()
+}
+
+func (fileInfo *smbFileInfo) Mode() os.FileMode {
+	return fileInfo.mode
+}
+
+func (fileInfo *smbFileInfo) ModTime() time.Time {
+	return fileInfo.modTime
+}
+
+func (fileInfo *smbFileInfo) Name() string {
+	return fileInfo.name
+}
+
+func (fileInfo *smbFileInfo) Size() int64 {
+	return fileInfo.size
+}
+
+func (fileInfo *smbFileInfo) Sys() interface{} {
+	return nil
+}
+
+// SMB io.ReadCloser implementation
+type smbReadCloser struct {
+	cContext    *C.SMBCCTX
+	cFileHandle *C.SMBCFILE
+}
+
+func (reader *smbReadCloser) Close() error {
+	var cRet C.int
+	var err error
+
+	cRet, err = C.pipewerx_smb_close(reader.cContext, reader.cFileHandle)
+
+	if int(cRet) != 0 {
+		return err
+	}
+
+	return nil
+}
+
+func (reader *smbReadCloser) Read(p []byte) (int, error) {
+	var bytesRead int
+	var err error
+	var read C.ssize_t
+
+	if len(p) == 0 {
+		return 0, nil
+	}
+
+	read, err = C.pipewerx_smb_read(reader.cContext, reader.cFileHandle, unsafe.Pointer(&p[0]), C.size_t(len(p)))
+
+	bytesRead = int(read)
+
+	if bytesRead < 0 {
+		return bytesRead, err
+	} else if bytesRead > 0 {
+		return bytesRead, nil
+	}
+
+	return bytesRead, io.EOF
 }
 
 //
-// Private constants
+// Private variables
 //
 
-const smbPathSeparator = "\\"
+var smbPathSeparator = "/"
+
+//
+// Private functions
+//
+
+func newSMBFileInfo(path string, cStat *C.struct_stat) os.FileInfo {
+	var mode = os.FileMode(cStat.st_mode)
+
+	// os.FileMode doesn't use the same directory mask as stat does, so if we find the stat directory mask
+	// (S_IFDIR = 040000), we have to change the mode to use the os.FileMode directory mask.
+
+	if mode&040000 != 0 {
+		mode |= os.ModeDir
+	}
+
+	return &smbFileInfo{
+		mode:    mode & (os.ModeDir | os.ModePerm),
+		modTime: time.Unix(int64(cStat.st_mtim.tv_sec), int64(cStat.st_mtim.tv_nsec)),
+		name:    path,
+		size:    int64(cStat.st_size),
+	}
+}

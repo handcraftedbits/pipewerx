@@ -1,4 +1,4 @@
-package pipewerx // import "golang.handcraftedbits.com/pipewerx/source"
+package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 
 import (
 	"bytes"

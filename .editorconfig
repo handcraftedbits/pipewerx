@@ -4,11 +4,11 @@ end_of_line = lf
 indent_style = space
 insert_final_newline = true
 
+[*.{c,h}]
+indent_size = 5
+
 [*.go]
 indent_style = tab
-
-[*.json]
-indent_size = 2
 
 [*.test]
 insert_final_newline = false

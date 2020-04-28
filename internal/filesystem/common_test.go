@@ -137,8 +137,7 @@ func testFilesystem(t *testing.T, config testFilesystemConfig) {
 				So(err, ShouldNotBeNil)
 			})
 
-			// TODO: leave out until SMB is fixed... seems to return nil now instead of the EOF error it used to...
-			/*Convey("should return the expected files in an empty directory", func() {
+			Convey("should return the expected files in an empty directory", func() {
 				var fileInfos []os.FileInfo
 
 				fileInfos, err = fs.ListFiles(config.realPath(testutil.TestdataPathFilesystem, "emptyDir"))
@@ -146,7 +145,7 @@ func testFilesystem(t *testing.T, config testFilesystemConfig) {
 				So(err, ShouldBeNil)
 				So(fileInfos, ShouldNotBeNil)
 				So(fileInfos, ShouldHaveLength, 0)
-			})*/
+			})
 
 			Convey("should return the expected files in a non-empty directory", func() {
 				var fileInfos []os.FileInfo
@@ -190,7 +189,7 @@ func testFilesystem(t *testing.T, config testFilesystemConfig) {
 				So(err, ShouldNotBeNil)
 			})
 
-			Convey("should be able to stat a valid file", func() {
+			Convey("should be able to read a valid file", func() {
 				var contents []byte
 				var reader io.ReadCloser
 

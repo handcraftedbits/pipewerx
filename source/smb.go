@@ -19,6 +19,8 @@ type SMBConfig struct {
 	Root     string
 	Share    string
 	Username string
+
+	enableTestConditions bool
 }
 
 //
@@ -30,13 +32,14 @@ func NewSMB(config SMBConfig) (pipewerx.Source, error) {
 	var fs pipewerx.Filesystem
 
 	fs, err = filesystem.NewSMB(filesystem.SMBConfig{
-		Domain:   config.Domain,
-		Host:     config.Host,
-		Password: config.Password,
-		Port:     config.Port,
-		Root:     config.Root,
-		Share:    config.Share,
-		Username: config.Username,
+		Domain:               config.Domain,
+		EnableTestConditions: config.enableTestConditions,
+		Host:                 config.Host,
+		Password:             config.Password,
+		Port:                 config.Port,
+		Root:                 config.Root,
+		Share:                config.Share,
+		Username:             config.Username,
 	})
 
 	if err != nil {

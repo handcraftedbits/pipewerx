@@ -2,6 +2,7 @@ package source // import "golang.handcraftedbits.com/pipewerx/source"
 
 import (
 	"testing"
+	"time"
 
 	"golang.handcraftedbits.com/pipewerx"
 	"golang.handcraftedbits.com/pipewerx/internal/testutil"
@@ -17,15 +18,13 @@ import (
 
 func TestNewSMB(t *testing.T) {
 	Convey("When calling NewSMB", t, func() {
-		Convey("it should return an error if an invalid configuration is provided", func() {
-			var config = SMBConfig{
-				Host: "????",
-				Port: -1,
-			}
+		Convey("it should return an error when test conditions are enabled", func() {
 			var err error
 			var source pipewerx.Source
 
-			source, err = NewSMB(config)
+			source, err = NewSMB(SMBConfig{
+				enableTestConditions: true,
+			})
 
 			So(source, ShouldBeNil)
 			So(err, ShouldNotBeNil)
@@ -50,7 +49,7 @@ func TestSMB(t *testing.T) {
 			return NewSMB(config)
 		},
 		name:          "an SMB",
-		pathSeparator: "\\",
+		pathSeparator: "/",
 		realPath: func(root, path string) string {
 			return path
 		},
@@ -74,8 +73,28 @@ func newSMBConfig(port int) SMBConfig {
 
 func startSambaContainer() int {
 	return testutil.StartSambaContainer(docker, testutil.TestdataPathFilesystem, func(hostPort int) error {
-		_, clientError := NewSMB(newSMBConfig(hostPort))
+		var err error
+		var source pipewerx.Source
 
-		return clientError
+		source, err = NewSMB(newSMBConfig(hostPort))
+
+		if err != nil {
+			return err
+		}
+
+		// libsmbclient doesn't open a connection upon creation, so we'll have to do a simple operation to test for
+		// readiness.
+
+		// TODO: not great, find a better way.
+
+		time.Sleep(1 * time.Second)
+
+		if source == nil {
+			return nil
+		}
+
+		//_, err = source.StatFile("")
+
+		return err
 	})
 }
