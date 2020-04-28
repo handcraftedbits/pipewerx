@@ -38,7 +38,7 @@ func TestSMB(t *testing.T) {
 	var port int
 
 	Convey("Starting Samba Docker container should succeed", t, func() {
-		port = startSambaContainer()
+		port = testutil.StartSambaContainer(docker, testutil.TestdataPathFilesystem)
 	})
 
 	Convey("When creating an SMB Filesystem with test conditions enabled", t, func() {
@@ -223,8 +223,6 @@ func TestSMBReadCloser(t *testing.T) {
 // Private functions
 //
 
-// TODO: maybe move into testutil... ?
-
 func newSMBConfig(port int) SMBConfig {
 	return SMBConfig{
 		Domain:   testutil.ConstSMBDomain,
@@ -234,24 +232,4 @@ func newSMBConfig(port int) SMBConfig {
 		Share:    testutil.ConstSMBShare,
 		Username: testutil.ConstSMBUser,
 	}
-}
-
-func startSambaContainer() int {
-	return testutil.StartSambaContainer(docker, testutil.TestdataPathFilesystem, func(hostPort int) error {
-		var err error
-		var fs pipewerx.Filesystem
-
-		fs, err = NewSMB(newSMBConfig(hostPort))
-
-		if err != nil {
-			return err
-		}
-
-		// libsmbclient doesn't open a connection upon creation, so we'll have to do a simple operation to test for
-		// readiness.
-
-		_, err = fs.StatFile("")
-
-		return err
-	})
 }

@@ -1,12 +1,16 @@
 package testutil // import "golang.handcraftedbits.com/pipewerx/internal/testutil"
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"net"
+	"regexp"
 	"strconv"
 	"sync"
 
 	"github.com/ory/dockertest/v3"
+	dc "github.com/ory/dockertest/v3/docker"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -15,6 +19,7 @@ import (
 // Public types
 //
 
+// Docker is used to start and do light introspection on Docker containers.
 type Docker struct {
 	mutex     sync.Mutex
 	pool      *dockertest.Pool
@@ -91,6 +96,39 @@ func (docker *Docker) Run(run *DockerRun) error {
 	return nil
 }
 
+func (docker *Docker) grepLogs(name, pattern string) (bool, error) {
+	var compiled *regexp.Regexp
+	var err error
+	var stderr bytes.Buffer
+	var stdout bytes.Buffer
+
+	if docker.resources[name] == nil {
+		return false, errors.New("no such container")
+	}
+
+	compiled, err = regexp.Compile(pattern)
+
+	if err != nil {
+		return false, err
+	}
+
+	err = docker.pool.Client.Logs(dc.LogsOptions{
+		Container:    docker.resources[name].Container.ID,
+		Context:      nil,
+		ErrorStream:  &stderr,
+		OutputStream: &stdout,
+		Stderr:       true,
+		Stdout:       true,
+	})
+
+	if err != nil {
+		return false, err
+	}
+
+	return compiled.MatchString(stdout.String()) || compiled.MatchString(stderr.String()), nil
+}
+
+// DockerRun defines a set of options used to run a Docker container.
 type DockerRun struct {
 	Args     []string
 	Env      map[string]string
@@ -155,9 +193,10 @@ func NewDocker(endpoint string) *Docker {
 	return docker
 }
 
-func StartSambaContainer(docker *Docker, absPath string, pingFunc func(int) error) int {
+func StartSambaContainer(docker *Docker, absPath string) int {
 	var err error
 	var port int
+	var resourceName = "samba"
 
 	err = docker.Run(&DockerRun{
 		Args: []string{
@@ -167,20 +206,41 @@ func StartSambaContainer(docker *Docker, absPath string, pingFunc func(int) erro
 		},
 		Env:   nil,
 		Image: "dperson/samba",
-		Name:  "samba",
+		Name:  resourceName,
 		Port:  445,
 		Tag:   "latest",
 		Volumes: map[string]string{
 			absPath: "/share",
 		},
-		PingFunc: pingFunc,
+		PingFunc: grepLogsPingFunc(docker, "samba", "daemon_ready"),
 	})
 
 	So(err, ShouldBeNil)
 
-	port = docker.HostPort("samba", 445)
+	port = docker.HostPort(resourceName, 445)
 
 	So(port, ShouldNotEqual, -1)
 
 	return port
+}
+
+//
+// Private functions
+//
+
+func grepLogsPingFunc(docker *Docker, name, pattern string) func(int) error {
+	return func(port int) error {
+		var err error
+		var found bool
+
+		found, err = docker.grepLogs(name, pattern)
+
+		if found {
+			return nil
+		} else {
+			err = errors.New("pattern not found in logs")
+		}
+
+		return err
+	}
 }

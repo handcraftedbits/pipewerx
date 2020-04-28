@@ -2,7 +2,6 @@ package source // import "golang.handcraftedbits.com/pipewerx/source"
 
 import (
 	"testing"
-	"time"
 
 	"golang.handcraftedbits.com/pipewerx"
 	"golang.handcraftedbits.com/pipewerx/internal/testutil"
@@ -36,7 +35,7 @@ func TestSMB(t *testing.T) {
 	var port int
 
 	Convey("Starting Samba Docker container should succeed", t, func() {
-		port = startSambaContainer()
+		port = testutil.StartSambaContainer(docker, testutil.TestdataPathFilesystem)
 	})
 
 	testSource(t, testSourceConfig{
@@ -69,32 +68,4 @@ func newSMBConfig(port int) SMBConfig {
 		Share:    testutil.ConstSMBShare,
 		Username: testutil.ConstSMBUser,
 	}
-}
-
-func startSambaContainer() int {
-	return testutil.StartSambaContainer(docker, testutil.TestdataPathFilesystem, func(hostPort int) error {
-		var err error
-		var source pipewerx.Source
-
-		source, err = NewSMB(newSMBConfig(hostPort))
-
-		if err != nil {
-			return err
-		}
-
-		// libsmbclient doesn't open a connection upon creation, so we'll have to do a simple operation to test for
-		// readiness.
-
-		// TODO: not great, find a better way.
-
-		time.Sleep(1 * time.Second)
-
-		if source == nil {
-			return nil
-		}
-
-		//_, err = source.StatFile("")
-
-		return err
-	})
 }

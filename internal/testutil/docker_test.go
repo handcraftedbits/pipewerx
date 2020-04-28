@@ -25,8 +25,44 @@ func TestDocker(t *testing.T) {
 
 		defer docker.Destroy()
 
-		Convey("calling HostPort", func() {
+		Convey("calling grepLogs", func() {
+			var result bool
+
+			Convey("should fail for a non-existent resource", func() {
+				result, err = docker.grepLogs("abc", "")
+
+				So(result, ShouldBeFalse)
+				So(err, ShouldNotBeNil)
+			})
+
+			Convey("should fail for an invalid regular expression", func() {
+				err = docker.Run(echoRun)
+
+				So(err, ShouldBeNil)
+
+				result, err = docker.grepLogs("echo", "*")
+
+				So(result, ShouldBeFalse)
+				So(err, ShouldNotBeNil)
+			})
+
 			Convey("should fail for a non-existent container", func() {
+				err = docker.Run(echoRun)
+
+				So(err, ShouldBeNil)
+
+				docker.resources["dummy"] = docker.resources["echo"]
+				docker.resources["dummy"].Container.ID = "xyz"
+
+				result, err = docker.grepLogs("echo", "abc")
+
+				So(result, ShouldBeFalse)
+				So(err, ShouldNotBeNil)
+			})
+		})
+
+		Convey("calling HostPort", func() {
+			Convey("should fail for a non-existent resource", func() {
 				So(docker.HostPort("abc", 123), ShouldEqual, -1)
 			})
 
@@ -147,9 +183,7 @@ func TestStartSambaContainer(t *testing.T) {
 
 			defer docker.Destroy()
 
-			StartSambaContainer(docker, TestdataPathFilesystem, func(hostPort int) error {
-				return nil
-			})
+			StartSambaContainer(docker, TestdataPathFilesystem)
 		})
 	})
 }
