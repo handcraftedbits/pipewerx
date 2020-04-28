@@ -124,7 +124,7 @@ func TestMergedSource(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(merged, ShouldNotBeNil)
 
-			Convey("calling Destroy should return the expected value", func() {
+			Convey("calling destroy should return the expected value", func() {
 				var multiErr MultiError
 
 				err = merged.destroy()

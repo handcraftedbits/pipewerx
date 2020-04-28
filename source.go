@@ -9,11 +9,11 @@ import (
 //
 
 type Source interface {
-	destroy() error
-
 	Files(context Context) (<-chan Result, CancelFunc)
 
 	Name() string
+
+	destroy() error
 }
 
 type SourceConfig struct {
@@ -45,22 +45,6 @@ func NewSource(config SourceConfig, fs Filesystem) (Source, error) {
 type mergedSource struct {
 	name    string
 	sources []Source
-}
-
-func (merged *mergedSource) destroy() error {
-	var errs []error
-
-	for _, source := range merged.sources {
-		if err := source.destroy(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	if errs != nil {
-		return newMultiError(sourceMergedDestroyMessage, errs)
-	}
-
-	return nil
 }
 
 func (merged *mergedSource) Files(context Context) (<-chan Result, CancelFunc) {
@@ -106,14 +90,26 @@ func (merged *mergedSource) Name() string {
 	return merged.name
 }
 
+func (merged *mergedSource) destroy() error {
+	var errs []error
+
+	for _, source := range merged.sources {
+		if err := source.destroy(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if errs != nil {
+		return newMultiError(sourceMergedDestroyMessage, errs)
+	}
+
+	return nil
+}
+
 // Default Source implementation
 type source struct {
 	config SourceConfig
 	fs     Filesystem
-}
-
-func (src *source) destroy() error {
-	return src.fs.Destroy()
 }
 
 func (src *source) Files(context Context) (<-chan Result, CancelFunc) {
@@ -157,6 +153,10 @@ func (src *source) Files(context Context) (<-chan Result, CancelFunc) {
 
 func (src *source) Name() string {
 	return src.config.Name
+}
+
+func (src *source) destroy() error {
+	return src.fs.Destroy()
 }
 
 //
