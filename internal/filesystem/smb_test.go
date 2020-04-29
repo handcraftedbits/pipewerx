@@ -19,12 +19,12 @@ import (
 // SMB filesystem tests
 
 func TestNewSMB(t *testing.T) {
-	Convey("When calling NewSMB", t, func() {
+	Convey("When calling SMB", t, func() {
 		Convey("it should return an error if an error occurs while creating the Samba context", func() {
 			var err error
 			var fs pipewerx.Filesystem
 
-			fs, err = NewSMB(SMBConfig{
+			fs, err = SMB(SMBConfig{
 				EnableTestConditions: true,
 			})
 
@@ -47,7 +47,7 @@ func TestSMB(t *testing.T) {
 		var ok bool
 		var smbFS *smb
 
-		fs, err = NewSMB(newSMBConfig(port))
+		fs, err = SMB(newSMBConfig(port))
 
 		So(err, ShouldBeNil)
 		So(fs, ShouldNotBeNil)
@@ -88,7 +88,7 @@ func TestSMB(t *testing.T) {
 		var ok bool
 		var smbFS *smb
 
-		fs, err = NewSMB(SMBConfig{})
+		fs, err = SMB(SMBConfig{})
 
 		So(err, ShouldBeNil)
 		So(fs, ShouldNotBeNil)
@@ -112,7 +112,7 @@ func TestSMB(t *testing.T) {
 
 	testFilesystem(t, testFilesystemConfig{
 		createFunc: func() (pipewerx.Filesystem, error) {
-			return NewSMB(newSMBConfig(port))
+			return SMB(newSMBConfig(port))
 		},
 		name: "an SMB",
 		realPath: func(root, path string) string {
@@ -170,7 +170,7 @@ func TestSMBReadCloser(t *testing.T) {
 		var reader io.ReadCloser
 		var smbFS *smb
 
-		fs, err = NewSMB(SMBConfig{})
+		fs, err = SMB(SMBConfig{})
 
 		So(err, ShouldBeNil)
 		So(fs, ShouldNotBeNil)

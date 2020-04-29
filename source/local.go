@@ -19,10 +19,10 @@ type LocalConfig struct {
 // Public functions
 //
 
-func NewLocal(config LocalConfig) (pipewerx.Source, error) {
+func Local(config LocalConfig) (pipewerx.Source, error) {
 	return pipewerx.NewSource(pipewerx.SourceConfig{
 		Name:    config.Name,
 		Recurse: config.Recurse,
 		Root:    config.Root,
-	}, filesystem.NewLocal(config.Root))
+	}, filesystem.Local(config.Root))
 }

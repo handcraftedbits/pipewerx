@@ -16,12 +16,12 @@ import (
 // SMB Source tests
 
 func TestNewSMB(t *testing.T) {
-	Convey("When calling NewSMB", t, func() {
+	Convey("When calling SMB", t, func() {
 		Convey("it should return an error when test conditions are enabled", func() {
 			var err error
 			var source pipewerx.Source
 
-			source, err = NewSMB(SMBConfig{
+			source, err = SMB(SMBConfig{
 				enableTestConditions: true,
 			})
 
@@ -45,7 +45,7 @@ func TestSMB(t *testing.T) {
 			config.Recurse = recurse
 			config.Root = root
 
-			return NewSMB(config)
+			return SMB(config)
 		},
 		name:          "an SMB",
 		pathSeparator: "/",

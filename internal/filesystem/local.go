@@ -14,7 +14,7 @@ import (
 // Public functions
 //
 
-func NewLocal(root string) pipewerx.Filesystem {
+func Local(root string) pipewerx.Filesystem {
 	return &local{
 		root: root,
 	}

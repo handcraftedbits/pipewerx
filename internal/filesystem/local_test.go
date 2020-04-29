@@ -15,7 +15,7 @@ import (
 func TestLocal(t *testing.T) {
 	testFilesystem(t, testFilesystemConfig{
 		createFunc: func() (pipewerx.Filesystem, error) {
-			return NewLocal(""), nil
+			return Local(""), nil
 		},
 		name: "a local",
 		realPath: func(root, path string) string {

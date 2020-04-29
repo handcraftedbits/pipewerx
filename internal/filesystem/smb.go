@@ -35,9 +35,10 @@ type SMBConfig struct {
 }
 
 //
-// Public functions/
+// Public functions
+//
 
-func NewSMB(config SMBConfig) (pipewerx.Filesystem, error) {
+func SMB(config SMBConfig) (pipewerx.Filesystem, error) {
 	var cContext *C.SMBCCTX
 	var cDomain = C.CString(config.Domain)
 	var cPassword = C.CString(config.Password)

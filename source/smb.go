@@ -27,11 +27,11 @@ type SMBConfig struct {
 // Public functions
 //
 
-func NewSMB(config SMBConfig) (pipewerx.Source, error) {
+func SMB(config SMBConfig) (pipewerx.Source, error) {
 	var err error
 	var fs pipewerx.Filesystem
 
-	fs, err = filesystem.NewSMB(filesystem.SMBConfig{
+	fs, err = filesystem.SMB(filesystem.SMBConfig{
 		Domain:               config.Domain,
 		EnableTestConditions: config.enableTestConditions,
 		Host:                 config.Host,

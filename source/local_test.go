@@ -16,7 +16,7 @@ import (
 func TestLocal(t *testing.T) {
 	testSource(t, testSourceConfig{
 		createFunc: func(root string, recurse bool) (pipewerx.Source, error) {
-			return NewLocal(LocalConfig{
+			return Local(LocalConfig{
 				Recurse: recurse,
 				Root:    root,
 			})
