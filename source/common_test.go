@@ -34,7 +34,7 @@ func TestMain(m *testing.M) {
 //
 
 type testSourceConfig struct {
-	createFunc    func(root string, recurse bool) (pipewerx.Source, error)
+	createFunc    func(id, root string, recurse bool) (pipewerx.Source, error)
 	name          string
 	pathSeparator string
 	realPath      func(string, string) string
@@ -110,11 +110,11 @@ func expectFilesInResults(results []pipewerx.Result, separator string, paths []s
 	}
 }
 
-func mustCreateSource(config testSourceConfig, root string, recurse bool) pipewerx.Source {
+func mustCreateSource(config testSourceConfig, id, root string, recurse bool) pipewerx.Source {
 	var err error
 	var source pipewerx.Source
 
-	source, err = config.createFunc(root, recurse)
+	source, err = config.createFunc(id, root, recurse)
 
 	So(err, ShouldBeNil)
 	So(source, ShouldNotBeNil)
@@ -123,6 +123,21 @@ func mustCreateSource(config testSourceConfig, root string, recurse bool) pipewe
 }
 
 func testSource(t *testing.T, config testSourceConfig) {
+	var sourceName = "source"
+
+	Convey("Creating "+config.name+" Source should fail when an invalid ID is provided", t, func() {
+		var err error
+		var ids = []string{"", " ", ".", "a ", " a", "a.", ".a", "a..b", "a-b", "?"}
+		var source pipewerx.Source
+
+		for _, id := range ids {
+			source, err = config.createFunc(id, "", false)
+
+			So(source, ShouldBeNil)
+			So(err, ShouldNotBeNil)
+		}
+	})
+
 	Convey("When creating "+config.name+" Source", t, func() {
 		var results []pipewerx.Result
 		var root string
@@ -132,13 +147,13 @@ func testSource(t *testing.T, config testSourceConfig) {
 				root = config.realPath(testutil.TestdataPathFilesystem, "emptyDir")
 
 				Convey("and recursion is enabled", func() {
-					results = collectSourceResults(mustCreateSource(config, root, true))
+					results = collectSourceResults(mustCreateSource(config, sourceName, root, true))
 
 					expectFilesInResults(results, config.pathSeparator, []string{}, nil)
 				})
 
 				Convey("and recursion is disabled", func() {
-					results = collectSourceResults(mustCreateSource(config, root, false))
+					results = collectSourceResults(mustCreateSource(config, sourceName, root, false))
 
 					expectFilesInResults(results, config.pathSeparator, []string{}, nil)
 				})
@@ -148,13 +163,13 @@ func testSource(t *testing.T, config testSourceConfig) {
 				root = config.realPath(testutil.TestdataPathFilesystem, "multipleEmptyDirs")
 
 				Convey("and recursion is enabled", func() {
-					results = collectSourceResults(mustCreateSource(config, root, true))
+					results = collectSourceResults(mustCreateSource(config, sourceName, root, true))
 
 					expectFilesInResults(results, config.pathSeparator, []string{}, nil)
 				})
 
 				Convey("and recursion is disabled", func() {
-					results = collectSourceResults(mustCreateSource(config, root, false))
+					results = collectSourceResults(mustCreateSource(config, sourceName, root, false))
 
 					expectFilesInResults(results, config.pathSeparator, []string{}, nil)
 				})
@@ -164,13 +179,13 @@ func testSource(t *testing.T, config testSourceConfig) {
 				root = config.realPath(testutil.TestdataPathFilesystem, "fileOnly.test")
 
 				Convey("and recursion is enabled", func() {
-					results = collectSourceResults(mustCreateSource(config, root, true))
+					results = collectSourceResults(mustCreateSource(config, sourceName, root, true))
 
 					expectFilesInResults(results, config.pathSeparator, []string{"fileOnly.test"}, []string{"fileOnly"})
 				})
 
 				Convey("and recursion is disabled", func() {
-					results = collectSourceResults(mustCreateSource(config, root, false))
+					results = collectSourceResults(mustCreateSource(config, sourceName, root, false))
 
 					expectFilesInResults(results, config.pathSeparator, []string{"fileOnly.test"}, []string{"fileOnly"})
 				})
@@ -180,14 +195,14 @@ func testSource(t *testing.T, config testSourceConfig) {
 				root = config.realPath(testutil.TestdataPathFilesystem, "filesOnly")
 
 				Convey("and recursion is enabled", func() {
-					results = collectSourceResults(mustCreateSource(config, root, true))
+					results = collectSourceResults(mustCreateSource(config, sourceName, root, true))
 
 					expectFilesInResults(results, config.pathSeparator, []string{"a.test", "b.test", "c.test"},
 						[]string{"a", "b", "c"})
 				})
 
 				Convey("and recursion is disabled", func() {
-					results = collectSourceResults(mustCreateSource(config, root, false))
+					results = collectSourceResults(mustCreateSource(config, sourceName, root, false))
 
 					expectFilesInResults(results, config.pathSeparator, []string{"a.test", "b.test", "c.test"},
 						[]string{"a", "b", "c"})
@@ -198,14 +213,14 @@ func testSource(t *testing.T, config testSourceConfig) {
 				root = config.realPath(testutil.TestdataPathFilesystem, "singleLevelSubdirs")
 
 				Convey("and recursion is enabled", func() {
-					results = collectSourceResults(mustCreateSource(config, root, true))
+					results = collectSourceResults(mustCreateSource(config, sourceName, root, true))
 
 					expectFilesInResults(results, config.pathSeparator, []string{"a/a.test", "b/b.test", "c/c.test"},
 						[]string{"a", "b", "c"})
 				})
 
 				Convey("and recursion is disabled", func() {
-					results = collectSourceResults(mustCreateSource(config, root, false))
+					results = collectSourceResults(mustCreateSource(config, sourceName, root, false))
 
 					expectFilesInResults(results, config.pathSeparator, []string{}, nil)
 				})
@@ -215,14 +230,14 @@ func testSource(t *testing.T, config testSourceConfig) {
 				root = config.realPath(testutil.TestdataPathFilesystem, "multiLevelSubdirs")
 
 				Convey("and recursion is enabled", func() {
-					results = collectSourceResults(mustCreateSource(config, root, true))
+					results = collectSourceResults(mustCreateSource(config, sourceName, root, true))
 
 					expectFilesInResults(results, config.pathSeparator, []string{"a/a.test", "b/c/c.test",
 						"d/e/f/f.test"}, []string{"a", "c", "f"})
 				})
 
 				Convey("and recursion is disabled", func() {
-					results = collectSourceResults(mustCreateSource(config, root, false))
+					results = collectSourceResults(mustCreateSource(config, sourceName, root, false))
 
 					expectFilesInResults(results, config.pathSeparator, []string{}, nil)
 				})
@@ -232,14 +247,14 @@ func testSource(t *testing.T, config testSourceConfig) {
 				root = config.realPath(testutil.TestdataPathFilesystem, "mixed")
 
 				Convey("and recursion is enabled", func() {
-					results = collectSourceResults(mustCreateSource(config, root, true))
+					results = collectSourceResults(mustCreateSource(config, sourceName, root, true))
 
 					expectFilesInResults(results, config.pathSeparator, []string{"a.test", "b.test", "c/c.test",
 						"d/e/f/f.test"}, []string{"a", "b", "c", "f"})
 				})
 
 				Convey("and recursion is disabled", func() {
-					results = collectSourceResults(mustCreateSource(config, root, false))
+					results = collectSourceResults(mustCreateSource(config, sourceName, root, false))
 
 					expectFilesInResults(results, config.pathSeparator, []string{"a.test", "b.test"},
 						[]string{"a", "b"})

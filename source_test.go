@@ -22,7 +22,7 @@ func TestMergedSource(t *testing.T) {
 				var merged Source
 				var source [2]Source
 
-				source[0], err = NewSource(SourceConfig{}, &memFilesystem{
+				source[0], err = NewSource(SourceConfig{ID: "source0"}, &memFilesystem{
 					root: &memFilesystemNode{
 						children: map[string]*memFilesystemNode{
 							"file1": {},
@@ -33,7 +33,7 @@ func TestMergedSource(t *testing.T) {
 				So(err, ShouldBeNil)
 				So(source[0], ShouldNotBeNil)
 
-				source[1], err = NewSource(SourceConfig{}, &memFilesystem{
+				source[1], err = NewSource(SourceConfig{ID: "source1"}, &memFilesystem{
 					root: &memFilesystemNode{
 						children: map[string]*memFilesystemNode{
 							"file2": {},
@@ -44,7 +44,7 @@ func TestMergedSource(t *testing.T) {
 				So(err, ShouldBeNil)
 				So(source[1], ShouldNotBeNil)
 
-				merged, err = newMergedSource([]Source{source[0], source[1]})
+				merged, err = newMergedSource("merged", []Source{source[0], source[1]})
 
 				So(err, ShouldBeNil)
 				So(merged, ShouldNotBeNil)
@@ -63,7 +63,7 @@ func TestMergedSource(t *testing.T) {
 			var source [3]Source
 
 			source[0], err = NewSource(SourceConfig{
-				Name: "source1",
+				ID: "source1",
 			}, &memFilesystem{
 				destroy: func() error {
 					return errors.New("source1")
@@ -83,7 +83,7 @@ func TestMergedSource(t *testing.T) {
 			So(source[0], ShouldNotBeNil)
 
 			source[1], err = NewSource(SourceConfig{
-				Name: "source2",
+				ID: "source2",
 			}, &memFilesystem{
 				destroy: func() error {
 					return errors.New("source2")
@@ -103,7 +103,7 @@ func TestMergedSource(t *testing.T) {
 			So(source[1], ShouldNotBeNil)
 
 			source[2], err = NewSource(SourceConfig{
-				Name: "source3",
+				ID: "source3",
 			}, &memFilesystem{
 				root: &memFilesystemNode{
 					children: map[string]*memFilesystemNode{
@@ -119,7 +119,7 @@ func TestMergedSource(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(source[2], ShouldNotBeNil)
 
-			merged, err = newMergedSource([]Source{source[0], source[1], source[2]})
+			merged, err = newMergedSource("merged", []Source{source[0], source[1], source[2]})
 
 			So(err, ShouldBeNil)
 			So(merged, ShouldNotBeNil)
@@ -182,8 +182,8 @@ func TestMergedSource(t *testing.T) {
 				})
 			})
 
-			Convey("calling Name should return the expected name", func() {
-				So(merged.Name(), ShouldEqual, sourceMergedName)
+			Convey("calling ID should return the expected ID", func() {
+				So(merged.ID(), ShouldEqual, "merged")
 			})
 		})
 	})
@@ -195,7 +195,7 @@ func TestNewMergedSource(t *testing.T) {
 			var err error
 			var merged Source
 
-			merged, err = newMergedSource(nil)
+			merged, err = newMergedSource("merged", nil)
 
 			Convey("it should return an error", func() {
 				So(merged, ShouldBeNil)
@@ -208,7 +208,7 @@ func TestNewMergedSource(t *testing.T) {
 			var err error
 			var merged Source
 
-			merged, err = newMergedSource([]Source{})
+			merged, err = newMergedSource("merged", []Source{})
 
 			Convey("it should return an error", func() {
 				So(merged, ShouldBeNil)
@@ -222,12 +222,12 @@ func TestNewMergedSource(t *testing.T) {
 			var merged Source
 			var source Source
 
-			source, err = NewSource(SourceConfig{}, &memFilesystem{})
+			source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{})
 
 			So(err, ShouldBeNil)
 			So(source, ShouldNotBeNil)
 
-			merged, err = newMergedSource([]Source{source})
+			merged, err = newMergedSource("merged", []Source{source})
 
 			Convey("it should return the same Source", func() {
 				So(err, ShouldBeNil)
@@ -242,7 +242,7 @@ func TestNewMergedSource(t *testing.T) {
 			var source1 Source
 			var source2 Source
 
-			source1, err = NewSource(SourceConfig{}, &memFilesystem{
+			source1, err = NewSource(SourceConfig{ID: "source1"}, &memFilesystem{
 				root: &memFilesystemNode{
 					children: map[string]*memFilesystemNode{
 						"file1": {},
@@ -253,7 +253,7 @@ func TestNewMergedSource(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(source1, ShouldNotBeNil)
 
-			source2, err = NewSource(SourceConfig{}, &memFilesystem{
+			source2, err = NewSource(SourceConfig{ID: "source2"}, &memFilesystem{
 				root: &memFilesystemNode{
 					children: map[string]*memFilesystemNode{
 						"file2": {},
@@ -264,7 +264,7 @@ func TestNewMergedSource(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(source2, ShouldNotBeNil)
 
-			merged, err = newMergedSource([]Source{source1, source2, source1, source2})
+			merged, err = newMergedSource("merged", []Source{source1, source2, source1, source2})
 
 			Convey("it should discard the duplicates", func() {
 				var results []Result
@@ -304,7 +304,7 @@ func TestNewSource(t *testing.T) {
 				var err error
 				var source Source
 
-				source, err = NewSource(SourceConfig{}, &memFilesystem{})
+				source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{})
 
 				So(err, ShouldBeNil)
 				So(source, ShouldNotBeNil)
@@ -320,7 +320,7 @@ func TestSource(t *testing.T) {
 				var err error
 				var source Source
 
-				source, err = NewSource(SourceConfig{}, &memFilesystem{
+				source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{
 					absolutePathError: errors.New("absolutePath"),
 				})
 
@@ -346,7 +346,7 @@ func TestSource(t *testing.T) {
 			var source Source
 
 			source, err = NewSource(SourceConfig{
-				Name:    "source",
+				ID:      "source",
 				Recurse: true,
 			}, &memFilesystem{
 				destroy: func() error {
@@ -417,8 +417,8 @@ func TestSource(t *testing.T) {
 				})
 			})
 
-			Convey("calling Name should return the expected name", func() {
-				So(source.Name(), ShouldEqual, "source")
+			Convey("calling ID should return the expected ID", func() {
+				So(source.ID(), ShouldEqual, "source")
 			})
 		})
 
@@ -426,7 +426,7 @@ func TestSource(t *testing.T) {
 			var err error
 			var source Source
 
-			source, err = NewSource(SourceConfig{}, &memFilesystem{
+			source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{
 				absolutePathError: errors.New("absolutePath"),
 				panic:             true,
 			})

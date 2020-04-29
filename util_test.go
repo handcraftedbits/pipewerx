@@ -344,6 +344,26 @@ func TestStripRoot(t *testing.T) {
 	})
 }
 
+func TestValidateID(t *testing.T) {
+	Convey("When calling validateID", t, func() {
+		Convey("it should succeed for valid IDs", func() {
+			var ids = []string{"a", "0", "a.0", "0.1", "a.b.c", "abc.def", "0.1.2", "0.abc.1.def"}
+
+			for _, id := range ids {
+				So(validateID(id), ShouldBeNil)
+			}
+		})
+
+		Convey("it should fail for invalid IDs", func() {
+			var ids = []string{"", " ", ".", "a ", " a", "a.", ".a", "a..b", "a-b", "?"}
+
+			for _, id := range ids {
+				So(validateID(id), ShouldNotBeNil)
+			}
+		})
+	})
+}
+
 //
 // Private types
 //

@@ -1,7 +1,9 @@
 package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 
 import (
+	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -18,8 +20,8 @@ type CancelFunc func(func())
 // Private types
 //
 
-// TODO: mention others as they are written.
-// cancellationHelper is used to simplify the handling of cancellation events in Sources and Filters.
+// cancellationHelper is used to simplify the handling of cancellation events in Sources, Filters, Operations, and
+// Destinations.
 type cancellationHelper struct {
 	callback  func()
 	cancel    chan<- struct{}
@@ -190,6 +192,12 @@ func (stack *stringStack) push(item string) {
 }
 
 //
+// Private variables
+//
+
+var idRegexp = regexp.MustCompile("^[[:alnum:]]+(?:\\.[[:alnum:]]+)*$")
+
+//
 // Private functions
 //
 
@@ -324,4 +332,12 @@ func stripRoot(root, path, separator string) string {
 	}
 
 	return path
+}
+
+func validateID(id string) error {
+	if idRegexp.MatchString(id) {
+		return nil
+	}
+
+	return fmt.Errorf("invalid ID '%s'", id)
 }

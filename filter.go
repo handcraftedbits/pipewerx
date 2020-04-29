@@ -9,7 +9,7 @@ type Filter interface {
 }
 
 type FilterConfig struct {
-	Name string
+	ID string
 }
 
 //
@@ -20,11 +20,17 @@ func NewFilter(config FilterConfig, sources []Source, evaluator FileEvaluator) (
 	var err error
 	var merged Source
 
+	err = validateID(config.ID)
+
+	if err != nil {
+		return nil, err
+	}
+
 	if evaluator == nil {
 		evaluator = &nilFileEvaluator{}
 	}
 
-	merged, err = newMergedSource(sources)
+	merged, err = newMergedSource(config.ID, sources)
 
 	if err != nil {
 		return nil, err
@@ -104,6 +110,6 @@ func (f *filter) Files(context Context) (<-chan Result, CancelFunc) {
 	return out, cancelHelper.invoker()
 }
 
-func (f *filter) Name() string {
-	return f.config.Name
+func (f *filter) ID() string {
+	return f.config.ID
 }

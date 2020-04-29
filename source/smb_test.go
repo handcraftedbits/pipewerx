@@ -39,9 +39,10 @@ func TestSMB(t *testing.T) {
 	})
 
 	testSource(t, testSourceConfig{
-		createFunc: func(root string, recurse bool) (pipewerx.Source, error) {
+		createFunc: func(id, root string, recurse bool) (pipewerx.Source, error) {
 			var config = newSMBConfig(port)
 
+			config.ID = id
 			config.Recurse = recurse
 			config.Root = root
 

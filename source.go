@@ -11,13 +11,13 @@ import (
 type Source interface {
 	Files(context Context) (<-chan Result, CancelFunc)
 
-	Name() string
+	ID() string
 
 	destroy() error
 }
 
 type SourceConfig struct {
-	Name    string
+	ID      string
 	Recurse bool
 	Root    string
 }
@@ -27,8 +27,16 @@ type SourceConfig struct {
 //
 
 func NewSource(config SourceConfig, fs Filesystem) (Source, error) {
+	var err error
+
 	if fs == nil {
 		return nil, errSourceNilFilesystem
+	}
+
+	err = validateID(config.ID)
+
+	if err != nil {
+		return nil, err
 	}
 
 	return &source{
@@ -43,7 +51,7 @@ func NewSource(config SourceConfig, fs Filesystem) (Source, error) {
 
 // Source implementation that combines multiple Sources
 type mergedSource struct {
-	name    string
+	id      string
 	sources []Source
 }
 
@@ -86,8 +94,8 @@ func (merged *mergedSource) Files(context Context) (<-chan Result, CancelFunc) {
 	return out, cancelHelper.invoker()
 }
 
-func (merged *mergedSource) Name() string {
-	return merged.name
+func (merged *mergedSource) ID() string {
+	return merged.id
 }
 
 func (merged *mergedSource) destroy() error {
@@ -151,8 +159,8 @@ func (src *source) Files(context Context) (<-chan Result, CancelFunc) {
 	return out, cancelHelper.invoker()
 }
 
-func (src *source) Name() string {
-	return src.config.Name
+func (src *source) ID() string {
+	return src.config.ID
 }
 
 func (src *source) destroy() error {
@@ -163,16 +171,13 @@ func (src *source) destroy() error {
 // Private constants
 //
 
-const (
-	sourceMergedDestroyMessage = "an error occurred while destroying the source"
-	sourceMergedName           = "<multiple sources>"
-)
+const sourceMergedDestroyMessage = "an error occurred while destroying the source"
 
 //
 // Private functions
 //
 
-func newMergedSource(sources []Source) (Source, error) {
+func newMergedSource(id string, sources []Source) (Source, error) {
 	var duplicates = make(map[Source]bool)
 	var sanitizedSources = make([]Source, 0)
 
@@ -206,7 +211,7 @@ func newMergedSource(sources []Source) (Source, error) {
 	}
 
 	return &mergedSource{
-		name:    sourceMergedName,
+		id:      id,
 		sources: sanitizedSources,
 	}, nil
 }

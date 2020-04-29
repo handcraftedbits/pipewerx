@@ -10,7 +10,7 @@ import (
 //
 
 type LocalConfig struct {
-	Name    string
+	ID      string
 	Recurse bool
 	Root    string
 }
@@ -21,7 +21,7 @@ type LocalConfig struct {
 
 func Local(config LocalConfig) (pipewerx.Source, error) {
 	return pipewerx.NewSource(pipewerx.SourceConfig{
-		Name:    config.Name,
+		ID:      config.ID,
 		Recurse: config.Recurse,
 		Root:    config.Root,
 	}, filesystem.Local(config.Root))

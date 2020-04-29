@@ -21,7 +21,7 @@ func TestFilter(t *testing.T) {
 			var filter Filter
 			var source Source
 
-			source, err = NewSource(SourceConfig{}, &memFilesystem{
+			source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{
 				root: &memFilesystemNode{
 					children: map[string]*memFilesystemNode{
 						"file1.keep":   {},
@@ -39,7 +39,7 @@ func TestFilter(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(source, ShouldNotBeNil)
 
-			filter, err = NewFilter(FilterConfig{Name: "filter"}, []Source{source}, &extensionFileEvaluator{
+			filter, err = NewFilter(FilterConfig{ID: "filter"}, []Source{source}, &extensionFileEvaluator{
 				destroyError: errors.New("destroy"),
 				extension:    "keep",
 			})
@@ -95,8 +95,8 @@ func TestFilter(t *testing.T) {
 				})
 			})
 
-			Convey("calling Name should return the expected name", func() {
-				So(filter.Name(), ShouldEqual, "filter")
+			Convey("calling ID should return the expected ID", func() {
+				So(filter.ID(), ShouldEqual, "filter")
 			})
 		})
 
@@ -105,7 +105,7 @@ func TestFilter(t *testing.T) {
 			var filter Filter
 			var source Source
 
-			source, err = NewSource(SourceConfig{}, &memFilesystem{
+			source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{
 				root: &memFilesystemNode{
 					children: map[string]*memFilesystemNode{
 						"file1.keep": {},
@@ -116,7 +116,7 @@ func TestFilter(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(source, ShouldNotBeNil)
 
-			filter, err = NewFilter(FilterConfig{Name: "filter"}, []Source{source}, &extensionFileEvaluator{
+			filter, err = NewFilter(FilterConfig{ID: "filter"}, []Source{source}, &extensionFileEvaluator{
 				extension:       "keep",
 				panic:           true,
 				shouldKeepError: errors.New("shouldKeep"),
@@ -140,7 +140,7 @@ func TestNewFilter(t *testing.T) {
 			var err error
 			var filter Filter
 
-			filter, err = NewFilter(FilterConfig{}, nil, nil)
+			filter, err = NewFilter(FilterConfig{ID: "filter"}, nil, nil)
 
 			Convey("it should return an error", func() {
 				So(filter, ShouldBeNil)
@@ -153,7 +153,7 @@ func TestNewFilter(t *testing.T) {
 			var err error
 			var filter Filter
 
-			filter, err = NewFilter(FilterConfig{}, []Source{}, nil)
+			filter, err = NewFilter(FilterConfig{ID: "filter"}, []Source{}, nil)
 
 			Convey("it should return an error", func() {
 				So(filter, ShouldBeNil)
@@ -167,7 +167,7 @@ func TestNewFilter(t *testing.T) {
 			var filter Filter
 			var source Source
 
-			source, err = NewSource(SourceConfig{}, &memFilesystem{
+			source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{
 				root: &memFilesystemNode{
 					children: map[string]*memFilesystemNode{
 						"file1": {},
@@ -179,7 +179,7 @@ func TestNewFilter(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(source, ShouldNotBeNil)
 
-			filter, err = NewFilter(FilterConfig{}, []Source{source}, nil)
+			filter, err = NewFilter(FilterConfig{ID: "filter"}, []Source{source}, nil)
 
 			So(err, ShouldBeNil)
 			So(filter, ShouldNotBeNil)

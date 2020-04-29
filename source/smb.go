@@ -12,7 +12,7 @@ import (
 type SMBConfig struct {
 	Domain   string
 	Host     string
-	Name     string
+	ID       string
 	Password string
 	Port     int
 	Recurse  bool
@@ -47,7 +47,7 @@ func SMB(config SMBConfig) (pipewerx.Source, error) {
 	}
 
 	return pipewerx.NewSource(pipewerx.SourceConfig{
-		Name:    config.Name,
+		ID:      config.ID,
 		Recurse: config.Recurse,
 		Root:    config.Root,
 	}, fs)
