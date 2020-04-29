@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 )
 
 //
@@ -12,6 +13,8 @@ import (
 //
 
 type File interface {
+	os.FileInfo
+
 	Path() FilePath
 
 	Reader() (io.ReadCloser, error)
@@ -93,8 +96,31 @@ func NewFilePath(dir []string, name, separator string) FilePath {
 
 // File implementation
 type file struct {
-	fs   Filesystem
-	path FilePath
+	fileInfo os.FileInfo
+	fs       Filesystem
+	path     FilePath
+}
+
+func (f *file) IsDir() bool {
+	return f.fileInfo.IsDir()
+}
+
+func (f *file) Mode() os.FileMode {
+	return f.fileInfo.Mode()
+}
+
+func (f *file) ModTime() time.Time {
+	return f.fileInfo.ModTime()
+}
+
+func (f *file) Name() string {
+	var name = f.path.Name()
+
+	if f.path.Extension() != "" {
+		name += "." + f.path.Extension()
+	}
+
+	return name
 }
 
 func (f *file) Path() FilePath {
@@ -103,6 +129,14 @@ func (f *file) Path() FilePath {
 
 func (f *file) Reader() (io.ReadCloser, error) {
 	return f.fs.ReadFile(f.path.String())
+}
+
+func (f *file) Size() int64 {
+	return f.fileInfo.Size()
+}
+
+func (f *file) Sys() interface{} {
+	return f.fileInfo.Sys()
 }
 
 // FilePath implementation

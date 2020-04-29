@@ -3,7 +3,9 @@ package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 import (
 	"bytes"
 	"errors"
+	"os"
 	"testing"
+	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -157,6 +159,58 @@ func TestPathStepper(t *testing.T) {
 	})
 }
 
+// stepperFileStack tests
+
+func TestStepperFileStack(t *testing.T) {
+	Convey("When creating a stepperFileStack", t, func() {
+		var stack = &stepperFileStack{}
+
+		Convey("calling clear should remove all items", func() {
+			stack.push(&stepperFile{
+				fileInfo: &nilFileInfo{name: "a"},
+				path:     "a",
+			})
+			stack.push(&stepperFile{
+				fileInfo: &nilFileInfo{name: "b"},
+				path:     "b",
+			})
+
+			So(stack.isEmpty(), ShouldBeFalse)
+
+			stack.clear()
+
+			So(stack.isEmpty(), ShouldBeTrue)
+		})
+
+		Convey("calling peek should return the last item on the stack", func() {
+			stack.push(&stepperFile{
+				fileInfo: &nilFileInfo{name: "a"},
+				path:     "a",
+			})
+			stack.push(&stepperFile{
+				fileInfo: &nilFileInfo{name: "b"},
+				path:     "b",
+			})
+
+			So(stack.peek().path, ShouldEqual, "b")
+		})
+
+		Convey("calling pop should remove the last item on the stack", func() {
+			stack.push(&stepperFile{
+				fileInfo: &nilFileInfo{name: "a"},
+				path:     "a",
+			})
+			stack.push(&stepperFile{
+				fileInfo: &nilFileInfo{name: "b"},
+				path:     "b",
+			})
+
+			So(stack.pop().path, ShouldEqual, "b")
+			So(stack.peek().path, ShouldEqual, "a")
+		})
+	})
+}
+
 // stringStack tests
 
 func TestStringStack(t *testing.T) {
@@ -262,7 +316,7 @@ func TestFindFiles(t *testing.T) {
 				statFileError: errors.New("statFile"),
 			}
 
-			err = findFiles(fs, "/", &stringStack{}, &stringStack{})
+			err = findFiles(fs, "/", &stringStack{}, &stepperFileStack{})
 
 			So(err, ShouldNotBeNil)
 			So(err.Error(), ShouldEqual, "a fatal error occurred: statFile")
@@ -288,4 +342,37 @@ func TestStripRoot(t *testing.T) {
 			})
 		})
 	})
+}
+
+//
+// Private types
+//
+
+// Dummy os.FileInfo implementation used to test file and fileInfoStack.
+type nilFileInfo struct {
+	name string
+}
+
+func (fi *nilFileInfo) Name() string {
+	return fi.name
+}
+
+func (fi *nilFileInfo) Size() int64 {
+	return 0
+}
+
+func (fi *nilFileInfo) Mode() os.FileMode {
+	return os.ModePerm
+}
+
+func (fi *nilFileInfo) ModTime() time.Time {
+	return time.Now()
+}
+
+func (fi *nilFileInfo) IsDir() bool {
+	return false
+}
+
+func (fi *nilFileInfo) Sys() interface{} {
+	return nil
 }

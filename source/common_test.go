@@ -104,6 +104,7 @@ func expectFilesInResults(results []pipewerx.Result, separator string, paths []s
 			err = reader.Close()
 
 			So(err, ShouldBeNil)
+			So(result.File().Size(), ShouldEqual, len(fileContents))
 			So(string(fileContents), ShouldEqual, contentMap[result.File().Path().String()])
 		}
 	}

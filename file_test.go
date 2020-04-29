@@ -22,7 +22,10 @@ import (
 
 func TestFile(t *testing.T) {
 	Convey("When creating a File", t, func() {
-		var f = &file{
+		var file1 = &file{
+			fileInfo: &nilFileInfo{
+				name: "name",
+			},
 			fs: &memFilesystem{
 				root: &memFilesystemNode{
 					children: map[string]*memFilesystemNode{
@@ -34,9 +37,46 @@ func TestFile(t *testing.T) {
 			},
 			path: NewFilePath(nil, "name", "/"),
 		}
+		var file2 = &file{
+			fileInfo: &nilFileInfo{
+				name: "name.ext",
+			},
+			fs: &memFilesystem{
+				root: &memFilesystemNode{
+					children: map[string]*memFilesystemNode{
+						"name.ext": {
+							contents: "abc",
+						},
+					},
+				},
+			},
+			path: NewFilePath(nil, "name.ext", "/"),
+		}
+
+		Convey("calling IsDir should return the expected value", func() {
+			So(file1.IsDir(), ShouldBeFalse)
+		})
+
+		Convey("calling Mode should return the expected value", func() {
+			So(file1.Mode(), ShouldEqual, os.ModePerm)
+		})
+
+		Convey("calling ModTime should return the expected value", func() {
+			So(file1.ModTime(), ShouldNotBeNil)
+		})
+
+		Convey("calling Name", func() {
+			Convey("for an a File with no extension should return the expected value", func() {
+				So(file1.Name(), ShouldEqual, "name")
+			})
+
+			Convey("for an a File with an extension should return the expected value", func() {
+				So(file2.Name(), ShouldEqual, "name.ext")
+			})
+		})
 
 		Convey("calling Path should return the expected FilePath", func() {
-			So(f.Path().String(), ShouldEqual, "name")
+			So(file1.Path().String(), ShouldEqual, "name")
 		})
 
 		Convey("calling ReadFile should return the expected contents", func() {
@@ -44,7 +84,7 @@ func TestFile(t *testing.T) {
 			var err error
 			var reader io.ReadCloser
 
-			reader, err = f.Reader()
+			reader, err = file1.Reader()
 
 			So(err, ShouldBeNil)
 			So(reader, ShouldNotBeNil)
@@ -53,6 +93,10 @@ func TestFile(t *testing.T) {
 
 			So(err, ShouldBeNil)
 			So(string(contents), ShouldEqual, "abc")
+		})
+
+		Convey("calling Sys should return the expected value", func() {
+			So(file1.Sys(), ShouldBeNil)
 		})
 	})
 }
@@ -161,18 +205,6 @@ func TestFilePath(t *testing.T) {
 //
 // Private types
 //
-
-// FileEvaluator implementation that discards all files
-type discardingFileEvaluator struct {
-}
-
-func (evaluator *discardingFileEvaluator) Destroy() error {
-	return nil
-}
-
-func (evaluator *discardingFileEvaluator) ShouldKeep(file File) (bool, error) {
-	return false, nil
-}
 
 // In-memory Filesystem implementation.
 type memFilesystem struct {
@@ -361,54 +393,8 @@ func (node *memFilesystemNode) Sys() interface{} {
 	return nil
 }
 
-// Test FileEvaluator implementation
-type testFileEvaluator struct {
-	destroyError   error
-	index          int
-	keepError      error
-	maxEvaluations int
-}
-
-func (evaluator *testFileEvaluator) Destroy() error {
-	return evaluator.destroyError
-}
-
-func (evaluator *testFileEvaluator) ShouldKeep(file File) (bool, error) {
-	evaluator.index++
-
-	if evaluator.index == evaluator.maxEvaluations {
-		return false, evaluator.keepError
-	}
-
-	return true, nil
-}
-
 //
 // Private variables
 //
 
 var memFilesystemErrorNotFound = fmt.Errorf("path not found")
-
-//
-// Private functions
-//
-
-func newTestFileEvaluator(maxEvaluations int, destroyError, keepError error) FileEvaluator {
-	return &testFileEvaluator{
-		destroyError:   destroyError,
-		index:          -1,
-		keepError:      keepError,
-		maxEvaluations: maxEvaluations,
-	}
-}
-
-func newTestFilePath(path string) FilePath {
-	var split = strings.Split(path, "/")
-
-	if split[0] == "" {
-		split = split[1:]
-		split[0] = "/" + split[0]
-	}
-
-	return NewFilePath(split[:len(split)-1], split[len(split)-1], "/")
-}

@@ -100,12 +100,14 @@ func (helper *cancellationHelper) logPanic(value interface{}) {
 // pathStepper is used to "step" through a filesystem path by listing one file at a time.
 type pathStepper struct {
 	dirs  *stringStack
-	files *stringStack
+	files *stepperFileStack
 	fs    Filesystem
 	root  string
 }
 
 func (stepper *pathStepper) nextFile() (File, error) {
+	var curFile *stepperFile
+
 	for stepper.files.isEmpty() {
 		if stepper.dirs.isEmpty() {
 			return nil, nil
@@ -116,13 +118,50 @@ func (stepper *pathStepper) nextFile() (File, error) {
 		}
 	}
 
+	curFile = stepper.files.pop()
+
 	return &file{
-		fs:   stepper.fs,
-		path: newFilePathFromString(stepper.fs, stepper.root, stepper.files.pop()),
+		fileInfo: curFile.fileInfo,
+		fs:       stepper.fs,
+		path:     newFilePathFromString(stepper.fs, stepper.root, curFile.path),
 	}, nil
 }
 
-// stringStack is used to create a simple stack of strings.
+// stepperFile is used to capture information about a file encountered by a pathStepper.
+type stepperFile struct {
+	fileInfo os.FileInfo
+	path     string
+}
+
+// stepperFileStack is used to create a stack of stepperFiles.
+type stepperFileStack []*stepperFile
+
+func (stack *stepperFileStack) clear() {
+	*stack = nil
+}
+
+func (stack *stepperFileStack) isEmpty() bool {
+	return len(*stack) == 0
+}
+
+func (stack *stepperFileStack) peek() *stepperFile {
+	return (*stack)[len(*stack)-1]
+}
+
+func (stack *stepperFileStack) pop() *stepperFile {
+	var end = len(*stack) - 1
+	var item = (*stack)[end]
+
+	*stack = (*stack)[:end]
+
+	return item
+}
+
+func (stack *stepperFileStack) push(item *stepperFile) {
+	*stack = append(*stack, item)
+}
+
+// stringStack is used to create a stack of strings.
 type stringStack []string
 
 func (stack *stringStack) clear() {
@@ -155,7 +194,7 @@ func (stack *stringStack) push(item string) {
 //
 
 // Finds all files and directories within the current path, without diving into subdirectories.
-func findFiles(fs Filesystem, path string, dirs, files *stringStack) (e error) {
+func findFiles(fs Filesystem, path string, dirs *stringStack, files *stepperFileStack) (e error) {
 	var err error
 	var fileInfo os.FileInfo
 	var fileInfos []os.FileInfo
@@ -173,7 +212,10 @@ func findFiles(fs Filesystem, path string, dirs, files *stringStack) (e error) {
 	}
 
 	if !fileInfo.IsDir() {
-		files.push(path)
+		files.push(&stepperFile{
+			fileInfo: fileInfo,
+			path:     path,
+		})
 
 		return nil
 	}
@@ -199,7 +241,10 @@ func findFiles(fs Filesystem, path string, dirs, files *stringStack) (e error) {
 		if fileInfo.IsDir() {
 			dirs.push(newPath)
 		} else {
-			files.push(newPath)
+			files.push(&stepperFile{
+				fileInfo: fileInfo,
+				path:     newPath,
+			})
 		}
 	}
 
@@ -231,7 +276,7 @@ func newFilePathFromString(fs Filesystem, root, path string) FilePath {
 func newPathStepper(fs Filesystem, root string, recurse bool) (p *pathStepper, e error) {
 	var err error
 	var dirs = &stringStack{}
-	var files = &stringStack{}
+	var files = &stepperFileStack{}
 
 	defer func() {
 		if value := recover(); value != nil {
@@ -256,7 +301,7 @@ func newPathStepper(fs Filesystem, root string, recurse bool) (p *pathStepper, e
 		dirs.clear()
 	}
 
-	if !files.isEmpty() && (root == files.peek()) {
+	if !files.isEmpty() && (root == files.peek().path) {
 		// Special case.  This implies that the root is a single file, not a directory, so we need to adjust the root
 		// directory accordingly or else downstream methods like File.Reader() will fail.
 
