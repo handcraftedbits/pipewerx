@@ -271,14 +271,9 @@ func newCancellationHelper(logger *zerolog.Logger, out chan<- Result, cancel cha
 }
 
 func newFilePathFromString(fs Filesystem, root, path string) FilePath {
-	// TODO: see if there's a way around this.  Seems unnecessary.
-	//  When StatFile or ListFiles is called, the path includes the root.  Otherwise it doesn't.  So why do we need
-	//  to include and strip the root when returning a file, which is only going to be passed to ReadFile()?
-	//  It doesn't expect the path to include the root.
-	//  Also, add comments in Filesystem that explains what kind of path is passed to StatFile, ListFiles, and ReadFile.
 	path = stripRoot(root, path, fs.PathSeparator())
 
-	return NewFilePath(fs.DirPart(path), fs.BasePart(path), fs.PathSeparator())
+	return newFilePath(fs.DirPart(path), fs.BasePart(path), fs.PathSeparator())
 }
 
 func newPathStepper(fs Filesystem, root string, recurse bool) (p *pathStepper, e error) {

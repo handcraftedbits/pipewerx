@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	pathutil "path"
 	"strings"
 	"time"
 )
@@ -36,7 +37,7 @@ type FilePath interface {
 	Name() string
 }
 
-// Filesystem is used to abstract filesystem operations and attributes.
+// Filesystem is used to abstract filesystem operations and properties.
 type Filesystem interface {
 	AbsolutePath(path string) (string, error)
 
@@ -46,48 +47,61 @@ type Filesystem interface {
 
 	DirPart(path string) []string
 
+	// ListFiles lists information for all the files directly under a given path (i.e., if the path represents a
+	// directory, it will return information for all the files in the directory without entering subdirectories; if the
+	// path represents a file, only information for that file will be returned).  Note that the path is considered
+	// absolute in the sense that it starts with the root path for the Source that uses this Filesystem.
 	ListFiles(path string) ([]os.FileInfo, error)
 
 	PathSeparator() string
 
+	// ReadFile retrieves an io.ReadCloser that can be used to read the contents of a file at a given path.  Note that
+	// the path is considered relative in the sense that it does not start with the root path for the Source that uses
+	// this Filesystem.
 	ReadFile(path string) (io.ReadCloser, error)
 
+	// StatFile retrieves information for a single file at a given path.  Note that the path is considered absolute in
+	// the sense that it starts with the root path for the Source that uses this Filesystem.
 	StatFile(path string) (os.FileInfo, error)
 }
 
-type NewFileEvaluatorFunc func(Context) (FileEvaluator, error)
+// FilesystemDefaults is used to help implement Filesystems by providing implementations for AbsolutePath, BasePart,
+// DirPart, and PathSeparator that are appropriate for most filesystems (namely, those with UNIX-style paths).
+type FilesystemDefaults struct {
+}
+
+func (fs FilesystemDefaults) AbsolutePath(path string) (string, error) {
+	if path == "" {
+		return path, nil
+	}
+
+	return pathutil.Clean(path), nil
+}
+
+func (fs FilesystemDefaults) BasePart(path string) string {
+	return pathutil.Base(path)
+}
+
+func (fs FilesystemDefaults) DirPart(path string) []string {
+	var dir = pathutil.Dir(path)
+
+	if dir == "." {
+		// This will be the case for a single file with no directory component, so return an empty array.
+
+		return []string{}
+	}
+
+	return strings.Split(dir, "/")
+}
+
+func (fs FilesystemDefaults) PathSeparator() string {
+	return "/"
+}
 
 type Result interface {
 	Error() error
 
 	File() File
-}
-
-//
-// Public functions
-//
-
-func NewFilePath(dir []string, name, separator string) FilePath {
-	var extension = ""
-	var index int
-
-	if dir == nil {
-		dir = []string{}
-	}
-
-	index = strings.LastIndexByte(name, '.')
-
-	if index != -1 {
-		extension = name[index+1:]
-		name = name[:index]
-	}
-
-	return &filePath{
-		dir:       dir,
-		extension: extension,
-		name:      name,
-		separator: separator,
-	}
 }
 
 //
@@ -199,4 +213,31 @@ func (res *result) Error() error {
 
 func (res *result) File() File {
 	return res.file
+}
+
+//
+// Private functions
+//
+
+func newFilePath(dir []string, name, separator string) FilePath {
+	var extension = ""
+	var index int
+
+	if dir == nil {
+		dir = []string{}
+	}
+
+	index = strings.LastIndexByte(name, '.')
+
+	if index != -1 {
+		extension = name[index+1:]
+		name = name[:index]
+	}
+
+	return &filePath{
+		dir:       dir,
+		extension: extension,
+		name:      name,
+		separator: separator,
+	}
 }

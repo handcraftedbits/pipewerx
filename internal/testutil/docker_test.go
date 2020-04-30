@@ -19,11 +19,12 @@ import (
 // Docker tests
 
 func TestDocker(t *testing.T) {
-	Convey("When creating a Docker instance", t, func() {
-		var docker = NewDocker("")
-		var err error
+	var docker = NewDocker("")
 
-		defer docker.Destroy()
+	defer docker.Destroy()
+
+	Convey("When creating a Docker instance", t, func() {
+		var err error
 
 		Convey("calling grepLogs", func() {
 			var result bool
@@ -47,9 +48,17 @@ func TestDocker(t *testing.T) {
 			})
 
 			Convey("should fail for a non-existent container", func() {
+				var containerID string
+
 				err = docker.Run(echoRun)
 
 				So(err, ShouldBeNil)
+
+				containerID = docker.resources["echo"].Container.ID
+
+				defer func() {
+					docker.resources["echo"].Container.ID = containerID
+				}()
 
 				docker.resources["dummy"] = docker.resources["echo"]
 				docker.resources["dummy"].Container.ID = "xyz"

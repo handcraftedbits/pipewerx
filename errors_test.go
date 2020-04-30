@@ -76,13 +76,3 @@ func TestNewPanicError(t *testing.T) {
 		})
 	})
 }
-
-//
-// Private types
-//
-
-type wrappedError interface {
-	error
-
-	Unwrap() error
-}

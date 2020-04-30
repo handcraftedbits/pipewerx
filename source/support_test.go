@@ -3,7 +3,6 @@ package source // import "golang.handcraftedbits.com/pipewerx/source"
 import (
 	"io"
 	"io/ioutil"
-	"os"
 	"strings"
 	"testing"
 
@@ -12,22 +11,6 @@ import (
 
 	. "github.com/smartystreets/goconvey/convey"
 )
-
-//
-// Public functions
-//
-
-func TestMain(m *testing.M) {
-	var code int
-
-	docker = testutil.NewDocker("")
-
-	code = m.Run()
-
-	docker.Destroy()
-
-	os.Exit(code)
-}
 
 //
 // Private types
@@ -39,12 +22,6 @@ type testSourceConfig struct {
 	pathSeparator string
 	realPath      func(string, string) string
 }
-
-//
-// Private variables
-//
-
-var docker *testutil.Docker
 
 //
 // Private functions
@@ -120,6 +97,17 @@ func mustCreateSource(config testSourceConfig, id, root string, recurse bool) pi
 	So(source, ShouldNotBeNil)
 
 	return source
+}
+
+func newSMBConfig(port int) SMBConfig {
+	return SMBConfig{
+		Domain:   testutil.ConstSMBDomain,
+		Host:     "localhost",
+		Password: testutil.ConstSMBPassword,
+		Port:     port,
+		Share:    testutil.ConstSMBShare,
+		Username: testutil.ConstSMBUser,
+	}
 }
 
 func testSource(t *testing.T, config testSourceConfig) {

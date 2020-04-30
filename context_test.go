@@ -17,13 +17,12 @@ import (
 
 func TestContext(t *testing.T) {
 	Convey("When creating a Context", t, func() {
+		var buffer bytes.Buffer
 		var context = NewContext(ContextConfig{})
 
 		context.Vars()["key"] = "value"
 
 		Convey("with a log level specified", func() {
-			var buffer bytes.Buffer
-
 			context = NewContext(ContextConfig{
 				Level:  zerolog.ErrorLevel,
 				Writer: &buffer,
@@ -51,8 +50,6 @@ func TestContext(t *testing.T) {
 		})
 
 		Convey("and specifying that JSON output should be used", func() {
-			var buffer bytes.Buffer
-
 			context = NewContext(ContextConfig{
 				UseJSON: true,
 				Writer:  &buffer,

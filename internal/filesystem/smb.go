@@ -12,7 +12,6 @@ import (
 	"io"
 	"os"
 	pathutil "path"
-	"strings"
 	"time"
 	"unsafe"
 
@@ -67,16 +66,10 @@ func SMB(config SMBConfig) (pipewerx.Filesystem, error) {
 
 // SMB pipewerx.Filesystem implementation
 type smb struct {
+	pipewerx.FilesystemDefaults
+
 	config   SMBConfig
 	cContext *C.SMBCCTX
-}
-
-func (fs *smb) AbsolutePath(path string) (string, error) {
-	return pathutil.Clean(path), nil
-}
-
-func (fs *smb) BasePart(path string) string {
-	return pathutil.Base(path)
 }
 
 func (fs *smb) Destroy() error {
@@ -90,18 +83,6 @@ func (fs *smb) Destroy() error {
 	}
 
 	return nil
-}
-
-func (fs *smb) DirPart(path string) []string {
-	var dir = pathutil.Dir(path)
-
-	if dir == "." {
-		// This will be the case for a single file with no directory component, so return an empty array.
-
-		return []string{}
-	}
-
-	return strings.Split(dir, smbPathSeparator)
 }
 
 func (fs *smb) ListFiles(path string) ([]os.FileInfo, error) {
@@ -148,10 +129,6 @@ func (fs *smb) ListFiles(path string) ([]os.FileInfo, error) {
 	}
 }
 
-func (fs *smb) PathSeparator() string {
-	return smbPathSeparator
-}
-
 func (fs *smb) ReadFile(path string) (io.ReadCloser, error) {
 	var cFileHandle *C.SMBCFILE
 	var cURL = C.CString(fs.makeURL(path, true))
@@ -190,42 +167,10 @@ func (fs *smb) StatFile(path string) (os.FileInfo, error) {
 
 func (fs *smb) makeURL(path string, includeRoot bool) string {
 	if includeRoot && (fs.config.Root != "" && fs.config.Root != path) {
-		path = fs.config.Root + smbPathSeparator + path
+		path = fs.config.Root + "/" + path
 	}
 
 	return fmt.Sprintf("smb://%s:%d/%s/%s", fs.config.Host, fs.config.Port, fs.config.Share, pathutil.Clean(path))
-}
-
-// SMB os.FileInfo implementation
-type smbFileInfo struct {
-	mode    os.FileMode
-	modTime time.Time
-	name    string
-	size    int64
-}
-
-func (fileInfo *smbFileInfo) IsDir() bool {
-	return fileInfo.mode.IsDir()
-}
-
-func (fileInfo *smbFileInfo) Mode() os.FileMode {
-	return fileInfo.mode
-}
-
-func (fileInfo *smbFileInfo) ModTime() time.Time {
-	return fileInfo.modTime
-}
-
-func (fileInfo *smbFileInfo) Name() string {
-	return fileInfo.name
-}
-
-func (fileInfo *smbFileInfo) Size() int64 {
-	return fileInfo.size
-}
-
-func (fileInfo *smbFileInfo) Sys() interface{} {
-	return nil
 }
 
 // SMB io.ReadCloser implementation
@@ -270,12 +215,6 @@ func (reader *smbReadCloser) Read(p []byte) (int, error) {
 }
 
 //
-// Private variables
-//
-
-var smbPathSeparator = "/"
-
-//
 // Private functions
 //
 
@@ -289,7 +228,7 @@ func newSMBFileInfo(path string, cStat *C.struct_stat) os.FileInfo {
 		mode |= os.ModeDir
 	}
 
-	return &smbFileInfo{
+	return &fileInfo{
 		mode:    mode & (os.ModeDir | os.ModePerm),
 		modTime: time.Unix(int64(cStat.st_mtim.tv_sec), int64(cStat.st_mtim.tv_nsec)),
 		name:    path,

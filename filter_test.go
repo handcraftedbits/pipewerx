@@ -16,11 +16,11 @@ import (
 
 func TestFilter(t *testing.T) {
 	Convey("When creating a Filter", t, func() {
-		Convey("which uses a FileEvaluator that discards some files and returns an error on destroy", func() {
-			var err error
-			var filter Filter
-			var source Source
+		var err error
+		var filter Filter
+		var source Source
 
+		Convey("which uses a FileEvaluator that discards some files and returns an error on destroy", func() {
 			source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{
 				root: &memFilesystemNode{
 					children: map[string]*memFilesystemNode{
@@ -55,8 +55,10 @@ func TestFilter(t *testing.T) {
 			})
 
 			Convey("calling Files", func() {
+				var results []Result
+
 				Convey("should return the expected Results", func() {
-					var results = collectSourceResults(filter)
+					results = collectSourceResults(filter)
 
 					expectFilePathsInResults(nil, results, []string{"file1.keep", "file2.keep", "file3.keep",
 						"file4.keep"})
@@ -65,8 +67,9 @@ func TestFilter(t *testing.T) {
 				Convey("and cancelling should return the expected Results", func(c C) {
 					var cancel CancelFunc
 					var in <-chan Result
-					var results = make([]Result, 0)
 					var wg sync.WaitGroup
+
+					results = make([]Result, 0)
 
 					in, cancel = filter.Files(NewContext(ContextConfig{}))
 
@@ -101,10 +104,6 @@ func TestFilter(t *testing.T) {
 		})
 
 		Convey("which uses a FileEvaluator that panics when calling ShouldKeep", func() {
-			var err error
-			var filter Filter
-			var source Source
-
 			source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{
 				root: &memFilesystemNode{
 					children: map[string]*memFilesystemNode{
@@ -136,10 +135,35 @@ func TestFilter(t *testing.T) {
 
 func TestNewFilter(t *testing.T) {
 	Convey("When calling NewFilter", t, func() {
-		Convey("with a nil Source array", func() {
-			var err error
-			var filter Filter
+		var err error
+		var filter Filter
 
+		Convey("it should succeed for valid IDs", func() {
+			var source Source
+
+			source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{})
+
+			So(err, ShouldBeNil)
+			So(source, ShouldNotBeNil)
+
+			for _, id := range idsValid {
+				filter, err = NewFilter(FilterConfig{ID: id}, []Source{source}, nil)
+
+				So(err, ShouldBeNil)
+				So(filter, ShouldNotBeNil)
+			}
+		})
+
+		Convey("it should fail for invalid IDs", func() {
+			for _, id := range idsInvalid {
+				filter, err = NewFilter(FilterConfig{ID: id}, nil, nil)
+
+				So(filter, ShouldBeNil)
+				So(err, ShouldNotBeNil)
+			}
+		})
+
+		Convey("with a nil Source array", func() {
 			filter, err = NewFilter(FilterConfig{ID: "filter"}, nil, nil)
 
 			Convey("it should return an error", func() {
@@ -150,9 +174,6 @@ func TestNewFilter(t *testing.T) {
 		})
 
 		Convey("with an empty Source array", func() {
-			var err error
-			var filter Filter
-
 			filter, err = NewFilter(FilterConfig{ID: "filter"}, []Source{}, nil)
 
 			Convey("it should return an error", func() {
@@ -163,8 +184,6 @@ func TestNewFilter(t *testing.T) {
 		})
 
 		Convey("with a nil FileEvaluator", func() {
-			var err error
-			var filter Filter
 			var source Source
 
 			source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{
@@ -197,40 +216,4 @@ func TestNewFilter(t *testing.T) {
 			})
 		})
 	})
-}
-
-//
-// Private types
-//
-
-// FileEvaluator implementation that discards files based on file extension.
-type extensionFileEvaluator struct {
-	destroyError    error
-	extension       string
-	panic           bool
-	shouldKeepError error
-}
-
-func (evaluator *extensionFileEvaluator) Destroy() error {
-	if evaluator.panic {
-		panic(evaluator.destroyError)
-	}
-
-	return evaluator.destroyError
-}
-
-func (evaluator *extensionFileEvaluator) ShouldKeep(file File) (bool, error) {
-	if evaluator.shouldKeepError != nil {
-		if evaluator.panic {
-			panic(evaluator.shouldKeepError)
-		}
-
-		return false, evaluator.shouldKeepError
-	}
-
-	if file.Path().Extension() == evaluator.extension {
-		return true, nil
-	}
-
-	return false, nil
 }

@@ -62,9 +62,10 @@ func (fs *local) PathSeparator() string {
 }
 
 func (fs *local) ReadFile(path string) (io.ReadCloser, error) {
-	if fs.BasePart(fs.root) != path {
-		// TODO: is this really the best way?
+	// If the base part of the filesystem root path is the same as the path, that implies that the root is a single file
+	// and we can't prepend the filesystem root to the path of the file that we're opening.
 
+	if fs.BasePart(fs.root) != path {
 		path = fs.root + localFSSeparator + path
 	} else {
 		path = fs.root

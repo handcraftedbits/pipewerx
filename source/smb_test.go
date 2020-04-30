@@ -32,7 +32,10 @@ func TestNewSMB(t *testing.T) {
 }
 
 func TestSMB(t *testing.T) {
+	var docker = testutil.NewDocker("")
 	var port int
+
+	defer docker.Destroy()
 
 	Convey("Starting Samba Docker container should succeed", t, func() {
 		port = testutil.StartSambaContainer(docker, testutil.TestdataPathFilesystem)
@@ -54,19 +57,4 @@ func TestSMB(t *testing.T) {
 			return path
 		},
 	})
-}
-
-//
-// Private functions
-//
-
-func newSMBConfig(port int) SMBConfig {
-	return SMBConfig{
-		Domain:   testutil.ConstSMBDomain,
-		Host:     "localhost",
-		Password: testutil.ConstSMBPassword,
-		Port:     port,
-		Share:    testutil.ConstSMBShare,
-		Username: testutil.ConstSMBUser,
-	}
 }

@@ -4,7 +4,6 @@ import (
 	"io"
 	"os"
 	"testing"
-	"time"
 
 	"golang.handcraftedbits.com/pipewerx"
 	"golang.handcraftedbits.com/pipewerx/internal/testutil"
@@ -35,7 +34,10 @@ func TestNewSMB(t *testing.T) {
 }
 
 func TestSMB(t *testing.T) {
+	var docker = testutil.NewDocker("")
 	var port int
+
+	defer docker.Destroy()
 
 	Convey("Starting Samba Docker container should succeed", t, func() {
 		port = testutil.StartSambaContainer(docker, testutil.TestdataPathFilesystem)
@@ -121,45 +123,6 @@ func TestSMB(t *testing.T) {
 	})
 }
 
-// smbFileInfo tests
-
-func TestSMBFileInfo(t *testing.T) {
-	var now = time.Now()
-
-	Convey("When creating an smbFileInfo", t, func() {
-		var fileInfo = &smbFileInfo{
-			mode:    os.ModeDir,
-			modTime: now,
-			name:    "name",
-			size:    1,
-		}
-
-		Convey("calling IsDir should return the expected value", func() {
-			So(fileInfo.IsDir(), ShouldBeTrue)
-		})
-
-		Convey("calling Mode should return the expected value", func() {
-			So(fileInfo.Mode(), ShouldEqual, os.ModeDir)
-		})
-
-		Convey("calling ModTime should return the expected value", func() {
-			So(fileInfo.ModTime(), ShouldEqual, now)
-		})
-
-		Convey("calling Name should return the expected value", func() {
-			So(fileInfo.Name(), ShouldEqual, "name")
-		})
-
-		Convey("calling Size should return the expected value", func() {
-			So(fileInfo.Size(), ShouldEqual, 1)
-		})
-
-		Convey("calling Sys should return the expected value", func() {
-			So(fileInfo.Sys(), ShouldEqual, nil)
-		})
-	})
-}
-
 // smbReadCloser tests
 
 func TestSMBReadCloser(t *testing.T) {
@@ -197,7 +160,7 @@ func TestSMBReadCloser(t *testing.T) {
 		Convey("calling Read", func() {
 			var amountRead int
 
-			Convey("with a nil or empty byte array should zero bytes read and no error", func() {
+			Convey("with a nil or empty byte array should return zero bytes read and no error", func() {
 				amountRead, err = reader.Read(nil)
 
 				So(amountRead, ShouldEqual, 0)
@@ -217,19 +180,4 @@ func TestSMBReadCloser(t *testing.T) {
 			})
 		})
 	})
-}
-
-//
-// Private functions
-//
-
-func newSMBConfig(port int) SMBConfig {
-	return SMBConfig{
-		Domain:   testutil.ConstSMBDomain,
-		Host:     "localhost",
-		Password: testutil.ConstSMBPassword,
-		Port:     port,
-		Share:    testutil.ConstSMBShare,
-		Username: testutil.ConstSMBUser,
-	}
 }

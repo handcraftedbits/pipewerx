@@ -3,9 +3,7 @@ package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 import (
 	"bytes"
 	"errors"
-	"os"
 	"testing"
-	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -43,7 +41,7 @@ func TestCancellationHelper(t *testing.T) {
 			})
 
 			Convey("should log a warning if a panic occurs in the invoker's callback function", func() {
-				var helper = newCancellationHelper(context.Log(), make(chan Result), make(chan<- struct{}), nil)
+				helper = newCancellationHelper(context.Log(), make(chan Result), make(chan<- struct{}), nil)
 
 				helper.callback = func() {
 					panic("invoker panic")
@@ -61,11 +59,11 @@ func TestCancellationHelper(t *testing.T) {
 
 func TestNewPathStepper(t *testing.T) {
 	Convey("When calling newPathStepper", t, func() {
+		var err error
+		var stepper *pathStepper
+
 		Convey("it should return an error if the underlying filesystem throws an error when getting the absolute path",
 			func() {
-				var err error
-				var stepper *pathStepper
-
 				stepper, err = newPathStepper(&memFilesystem{
 					absolutePathError: errors.New("absolutePath"),
 				}, "/", false)
@@ -79,10 +77,10 @@ func TestNewPathStepper(t *testing.T) {
 
 func TestPathStepper(t *testing.T) {
 	Convey("When creating a pathStepper", t, func() {
-		Convey("for a single file", func() {
-			var err error
-			var stepper *pathStepper
+		var err error
+		var stepper *pathStepper
 
+		Convey("for a single file", func() {
 			stepper, err = newPathStepper(&memFilesystem{
 				root: &memFilesystemNode{
 					children: map[string]*memFilesystemNode{
@@ -114,9 +112,6 @@ func TestPathStepper(t *testing.T) {
 		})
 
 		Convey("for a nested directory structure", func() {
-			var err error
-			var stepper *pathStepper
-
 			stepper, err = newPathStepper(&memFilesystem{
 				root: &memFilesystemNode{
 					children: map[string]*memFilesystemNode{
@@ -249,9 +244,10 @@ func TestStringStack(t *testing.T) {
 
 func TestFindFiles(t *testing.T) {
 	Convey("When calling findFiles", t, func() {
+		var err error
+
 		Convey("it should return an error if the underlying filesystem returns an error when retrieving information "+
 			"about the root path", func() {
-			var err error
 			var stepper *pathStepper
 
 			stepper, err = newPathStepper(&memFilesystem{
@@ -265,7 +261,6 @@ func TestFindFiles(t *testing.T) {
 		})
 
 		Convey("it should return an error if the underlying filesystem returns an error when listing files", func() {
-			var err error
 			var file File
 			var root = &memFilesystemNode{
 				children: map[string]*memFilesystemNode{
@@ -298,7 +293,6 @@ func TestFindFiles(t *testing.T) {
 		})
 
 		Convey("it should return an error if the underlying filesystem panics", func() {
-			var err error
 			var fs Filesystem
 			var root = &memFilesystemNode{
 				children: map[string]*memFilesystemNode{
@@ -326,8 +320,10 @@ func TestFindFiles(t *testing.T) {
 
 func TestStripRoot(t *testing.T) {
 	Convey("When calling stripRoot", t, func() {
+		var result string
+
 		Convey("with a path that starts with the path separator", func() {
-			var result = stripRoot("/abc", "/abc/xyz", "/")
+			result = stripRoot("/abc", "/abc/xyz", "/")
 
 			Convey("it should return the path with the root and the path separator stripped from it", func() {
 				So(result, ShouldEqual, "xyz")
@@ -335,7 +331,7 @@ func TestStripRoot(t *testing.T) {
 		})
 
 		Convey("with a path that does not start with the path separator", func() {
-			var result = stripRoot("/abc", "/abcxyz", "/")
+			result = stripRoot("/abc", "/abcxyz", "/")
 
 			Convey("it should return the path with only the root stripped from it", func() {
 				So(result, ShouldEqual, "xyz")
@@ -347,52 +343,15 @@ func TestStripRoot(t *testing.T) {
 func TestValidateID(t *testing.T) {
 	Convey("When calling validateID", t, func() {
 		Convey("it should succeed for valid IDs", func() {
-			var ids = []string{"a", "0", "a.0", "0.1", "a.b.c", "abc.def", "0.1.2", "0.abc.1.def"}
-
-			for _, id := range ids {
+			for _, id := range idsValid {
 				So(validateID(id), ShouldBeNil)
 			}
 		})
 
 		Convey("it should fail for invalid IDs", func() {
-			var ids = []string{"", " ", ".", "a ", " a", "a.", ".a", "a..b", "a-b", "?"}
-
-			for _, id := range ids {
+			for _, id := range idsInvalid {
 				So(validateID(id), ShouldNotBeNil)
 			}
 		})
 	})
-}
-
-//
-// Private types
-//
-
-// Dummy os.FileInfo implementation used to test file and fileInfoStack.
-type nilFileInfo struct {
-	name string
-}
-
-func (fi *nilFileInfo) Name() string {
-	return fi.name
-}
-
-func (fi *nilFileInfo) Size() int64 {
-	return 0
-}
-
-func (fi *nilFileInfo) Mode() os.FileMode {
-	return os.ModePerm
-}
-
-func (fi *nilFileInfo) ModTime() time.Time {
-	return time.Now()
-}
-
-func (fi *nilFileInfo) IsDir() bool {
-	return false
-}
-
-func (fi *nilFileInfo) Sys() interface{} {
-	return nil
 }

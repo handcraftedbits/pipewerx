@@ -16,10 +16,11 @@ import (
 
 func TestMergedSource(t *testing.T) {
 	Convey("When creating a mergedSource", t, func() {
+		var err error
+		var merged Source
+
 		Convey("which contains a number of Sources, each of which have a Filesystem that does nothing when destroyed",
 			func() {
-				var err error
-				var merged Source
 				var source [2]Source
 
 				source[0], err = NewSource(SourceConfig{ID: "source0"}, &memFilesystem{
@@ -56,10 +57,8 @@ func TestMergedSource(t *testing.T) {
 
 		Convey("which contains a number of Sources, most of which have a Filesystem that performs an action when "+
 			"destroyed", func() {
-			var err error
 			var expected = []string{"file01", "file02", "file03", "file04", "file05", "file06", "file07", "file08",
 				"file09", "file10", "file11", "file12", "file13", "file14", "file15"}
-			var merged Source
 			var source [3]Source
 
 			source[0], err = NewSource(SourceConfig{
@@ -141,8 +140,10 @@ func TestMergedSource(t *testing.T) {
 			})
 
 			Convey("calling Files", func() {
+				var results []Result
+
 				Convey("should return the expected Results", func() {
-					var results = collectSourceResults(merged)
+					results = collectSourceResults(merged)
 
 					So(results, ShouldHaveLength, 15)
 
@@ -152,8 +153,9 @@ func TestMergedSource(t *testing.T) {
 				Convey("and cancelling should return the expected Results", func(c C) {
 					var cancel CancelFunc
 					var in <-chan Result
-					var results = make([]Result, 0)
 					var wg sync.WaitGroup
+
+					results = make([]Result, 0)
 
 					in, cancel = merged.Files(NewContext(ContextConfig{}))
 
@@ -191,10 +193,10 @@ func TestMergedSource(t *testing.T) {
 
 func TestNewMergedSource(t *testing.T) {
 	Convey("When calling newMergedSource", t, func() {
-		Convey("with a nil Source array", func() {
-			var err error
-			var merged Source
+		var err error
+		var merged Source
 
+		Convey("with a nil Source array", func() {
 			merged, err = newMergedSource("merged", nil)
 
 			Convey("it should return an error", func() {
@@ -205,9 +207,6 @@ func TestNewMergedSource(t *testing.T) {
 		})
 
 		Convey("with an empty Source array", func() {
-			var err error
-			var merged Source
-
 			merged, err = newMergedSource("merged", []Source{})
 
 			Convey("it should return an error", func() {
@@ -218,8 +217,6 @@ func TestNewMergedSource(t *testing.T) {
 		})
 
 		Convey("with a single Source", func() {
-			var err error
-			var merged Source
 			var source Source
 
 			source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{})
@@ -237,8 +234,6 @@ func TestNewMergedSource(t *testing.T) {
 		})
 
 		Convey("with duplicate Sources", func() {
-			var err error
-			var merged Source
 			var source1 Source
 			var source2 Source
 
@@ -286,11 +281,29 @@ func TestNewMergedSource(t *testing.T) {
 
 func TestNewSource(t *testing.T) {
 	Convey("When calling NewSource", t, func() {
+		var err error
+		var source Source
+
+		Convey("it should succeed for valid IDs", func() {
+			for _, id := range idsValid {
+				source, err = NewSource(SourceConfig{ID: id}, &memFilesystem{})
+
+				So(err, ShouldBeNil)
+				So(source, ShouldNotBeNil)
+			}
+		})
+
+		Convey("it should fail for invalid IDs", func() {
+			for _, id := range idsInvalid {
+				source, err = NewSource(SourceConfig{ID: id}, &memFilesystem{})
+
+				So(source, ShouldBeNil)
+				So(err, ShouldNotBeNil)
+			}
+		})
+
 		Convey("with a nil Filesystem", func() {
 			Convey("it should return an error", func() {
-				var err error
-				var source Source
-
 				source, err = NewSource(SourceConfig{}, nil)
 
 				So(source, ShouldBeNil)
@@ -301,9 +314,6 @@ func TestNewSource(t *testing.T) {
 
 		Convey("with a valid Filesystem", func() {
 			Convey("it should not return an error", func() {
-				var err error
-				var source Source
-
 				source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{})
 
 				So(err, ShouldBeNil)
@@ -315,11 +325,11 @@ func TestNewSource(t *testing.T) {
 
 func TestSource(t *testing.T) {
 	Convey("When creating a Source", t, func() {
+		var err error
+		var source Source
+
 		Convey("which fails immediately upon access and has a Filesystem which performs no action when destroyed",
 			func() {
-				var err error
-				var source Source
-
 				source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{
 					absolutePathError: errors.New("absolutePath"),
 				})
@@ -342,9 +352,6 @@ func TestSource(t *testing.T) {
 			})
 
 		Convey("which contains a number of files and has a Filesystem which performs an action when destroyed", func() {
-			var err error
-			var source Source
-
 			source, err = NewSource(SourceConfig{
 				ID:      "source",
 				Recurse: true,
@@ -380,8 +387,10 @@ func TestSource(t *testing.T) {
 			})
 
 			Convey("calling Files", func() {
+				var results []Result
+
 				Convey("should return the expected Results", func() {
-					var results = collectSourceResults(source)
+					results = collectSourceResults(source)
 
 					So(results, ShouldHaveLength, 3)
 
@@ -391,8 +400,9 @@ func TestSource(t *testing.T) {
 				Convey("and cancelling should return the expected Results", func(c C) {
 					var cancel CancelFunc
 					var in <-chan Result
-					var results = make([]Result, 0)
 					var wg sync.WaitGroup
+
+					results = make([]Result, 0)
 
 					in, cancel = source.Files(NewContext(ContextConfig{}))
 
@@ -423,9 +433,6 @@ func TestSource(t *testing.T) {
 		})
 
 		Convey("which panics when calling Files", func() {
-			var err error
-			var source Source
-
 			source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{
 				absolutePathError: errors.New("absolutePath"),
 				panic:             true,
@@ -444,41 +451,4 @@ func TestSource(t *testing.T) {
 			})
 		})
 	})
-}
-
-//
-// Private functions
-//
-
-func collectSourceResults(source Source) []Result {
-	var in <-chan Result
-	var results = make([]Result, 0)
-
-	in, _ = source.Files(NewContext(ContextConfig{}))
-
-	for result := range in {
-		results = append(results, result)
-	}
-
-	return results
-}
-
-func expectFilePathsInResults(c C, results []Result, paths []string) {
-	var pathMap = make(map[string]bool)
-
-	for _, path := range paths {
-		pathMap[path] = true
-	}
-
-	if c == nil {
-		for _, result := range results {
-			So(result.Error(), ShouldBeNil)
-			So(pathMap, ShouldContainKey, result.File().Path().String())
-		}
-	} else {
-		for _, result := range results {
-			c.So(result.Error(), ShouldBeNil)
-			c.So(pathMap, ShouldContainKey, result.File().Path().String())
-		}
-	}
 }
