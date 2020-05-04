@@ -136,7 +136,6 @@ func TestMergedSource(t *testing.T) {
 				So(multiErr.Causes(), ShouldHaveLength, 2)
 				So(multiErr.Causes()[0].Error(), ShouldEqual, "source1")
 				So(multiErr.Causes()[1].Error(), ShouldEqual, "source2")
-				So(multiErr.Error(), ShouldEqual, sourceMergedDestroyMessage)
 			})
 
 			Convey("calling Files", func() {
@@ -280,6 +279,9 @@ func TestNewMergedSource(t *testing.T) {
 // Source tests
 
 func TestNewSource(t *testing.T) {
+	eventSinkTestMutex.Lock()
+	defer eventSinkTestMutex.Unlock()
+
 	Convey("When calling NewSource", t, func() {
 		var err error
 		var source Source
@@ -313,20 +315,40 @@ func TestNewSource(t *testing.T) {
 		})
 
 		Convey("with a valid Filesystem", func() {
+			Reset(resetGlobalEventSink)
+
 			Convey("it should not return an error", func() {
+				var sink = &testEventSink{}
+
+				RegisterEventSink(sink)
+				allowEventsFrom(componentSource, true)
+
 				source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{})
 
 				So(err, ShouldBeNil)
 				So(source, ShouldNotBeNil)
+
+				Convey("and the appropriate event should be sent", func() {
+					sink.expectEvents(eventSourceCreated)
+				})
 			})
 		})
 	})
 }
 
 func TestSource(t *testing.T) {
+	eventSinkTestMutex.Lock()
+	eventSinkTestMutex.Unlock()
+
 	Convey("When creating a Source", t, func() {
 		var err error
+		var sink = &testEventSink{}
 		var source Source
+
+		Reset(resetGlobalEventSink)
+
+		RegisterEventSink(sink)
+		allowEventsFrom(componentSource, true)
 
 		Convey("which fails immediately upon access and has a Filesystem which performs no action when destroyed",
 			func() {
@@ -339,6 +361,10 @@ func TestSource(t *testing.T) {
 
 				Convey("calling destroy should not perform any action", func() {
 					So(source.destroy(), ShouldBeNil)
+
+					Convey("and the appropriate events should be sent", func() {
+						sink.expectEvents(eventSourceCreated, eventSourceDestroyed)
+					})
 				})
 
 				Convey("calling Files should return an error", func() {
@@ -348,6 +374,11 @@ func TestSource(t *testing.T) {
 					So(results[0].File(), ShouldBeNil)
 					So(results[0].Error(), ShouldNotBeNil)
 					So(results[0].Error().Error(), ShouldEqual, "absolutePath")
+
+					Convey("and the appropriate events should be sent", func() {
+						sink.expectEvents(eventSourceCreated, eventSourceStarted, eventSourceResultProduced,
+							eventSourceFinished)
+					})
 				})
 			})
 
@@ -384,6 +415,10 @@ func TestSource(t *testing.T) {
 
 				So(err, ShouldNotBeNil)
 				So(err.Error(), ShouldEqual, "destroy")
+
+				Convey("and the appropriate events should be sent", func() {
+					sink.expectEvents(eventSourceCreated, eventSourceDestroyed)
+				})
 			})
 
 			Convey("calling Files", func() {
@@ -395,6 +430,11 @@ func TestSource(t *testing.T) {
 					So(results, ShouldHaveLength, 3)
 
 					expectFilePathsInResults(nil, results, []string{"file", "dir1/file1", "dir2/file2"})
+
+					Convey("and the appropriate events should be sent", func() {
+						sink.expectEvents(eventSourceCreated, eventSourceStarted, eventSourceResultProduced,
+							eventSourceResultProduced, eventSourceResultProduced, eventSourceFinished)
+					})
 				})
 
 				Convey("and cancelling should return the expected Results", func(c C) {
@@ -424,6 +464,11 @@ func TestSource(t *testing.T) {
 					})
 
 					wg.Wait()
+
+					Convey("and the appropriate events should be sent", func() {
+						sink.expectEvents(eventSourceCreated, eventSourceStarted, eventSourceResultProduced,
+							eventSourceResultProduced, eventSourceCancelled, eventSourceFinished)
+					})
 				})
 			})
 
@@ -448,7 +493,50 @@ func TestSource(t *testing.T) {
 				So(results[0].File(), ShouldBeNil)
 				So(results[0].Error(), ShouldNotBeNil)
 				So(results[0].Error().Error(), ShouldEqual, "a fatal error occurred: absolutePath")
+
+				Convey("and the appropriate events should be sent", func() {
+					sink.expectEvents(eventSourceCreated, eventSourceStarted, eventSourceResultProduced,
+						eventSourceFinished)
+				})
 			})
 		})
+	})
+}
+
+func TestSourceEvents(t *testing.T) {
+	var id = "source"
+
+	Convey("When calling sourceEventCancelled", t, func() {
+		validateSourceEvent(sourceEventCancelled(id), componentSource, eventTypeCancelled, id)
+	})
+
+	Convey("When calling sourceEventCreated", t, func() {
+		validateSourceEvent(sourceEventCreated(id), componentSource, eventTypeCreated, id)
+	})
+
+	Convey("When calling sourceEventDestroyed", t, func() {
+		validateSourceEvent(sourceEventDestroyed(id), componentSource, eventTypeDestroyed, id)
+	})
+
+	Convey("When calling sourceEventFinished", t, func() {
+		validateSourceEvent(sourceEventFinished(id), componentSource, eventTypeFinished, id)
+	})
+
+	Convey("When calling sourceEventResultProduced", t, func() {
+		var res = &result{
+			err: errors.New("result error"),
+			file: &file{
+				fileInfo: &nilFileInfo{
+					name: "name",
+				},
+				path: newFilePath(nil, "name", "/"),
+			},
+		}
+
+		validateSourceEvent(sourceEventResultProduced(id, res), componentSource, eventTypeResultProduced, id)
+	})
+
+	Convey("When calling sourceEventStarted", t, func() {
+		validateSourceEvent(sourceEventStarted(id), componentSource, eventTypeStarted, id)
 	})
 }

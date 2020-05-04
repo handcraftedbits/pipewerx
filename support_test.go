@@ -2,11 +2,13 @@ package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -254,11 +256,62 @@ type wrappedError interface {
 	Unwrap() error
 }
 
+// EventSink implementation used to verify the order of sent events.
+type testEventSink struct {
+	events []Event
+}
+
+func (sink *testEventSink) Send(event Event) {
+	sink.events = append(sink.events, event)
+}
+
+func (sink *testEventSink) expectEvents(events ...string) {
+	// Ugly, but we have to sync against the globalEventSink if we want to introspect on it during multithreaded
+	// testing.
+
+	globalEventSink.mutex.RLock()
+
+	So(sink.events, ShouldHaveLength, len(events))
+
+	for i, event := range sink.events {
+		var index = strings.Index(events[i], ".")
+
+		So(event.Component(), ShouldEqual, events[i][:index])
+		So(event.Type(), ShouldEqual, events[i][index+1:])
+	}
+
+	globalEventSink.mutex.RUnlock()
+}
+
+//
+// Private constants
+//
+
+const (
+	// Filter event names for testEventSink.expectEvents()
+	eventFilterCancelled      = componentFilter + "." + eventTypeCancelled
+	eventFilterCreated        = componentFilter + "." + eventTypeCreated
+	eventFilterDestroyed      = componentFilter + "." + eventTypeDestroyed
+	eventFilterFinished       = componentFilter + "." + eventTypeFinished
+	eventFilterResultProduced = componentFilter + "." + eventTypeResultProduced
+	eventFilterStarted        = componentFilter + "." + eventTypeStarted
+
+	// Source event names for testEventSink.expectEvents()
+	eventSourceCancelled      = componentSource + "." + eventTypeCancelled
+	eventSourceCreated        = componentSource + "." + eventTypeCreated
+	eventSourceDestroyed      = componentSource + "." + eventTypeDestroyed
+	eventSourceFinished       = componentSource + "." + eventTypeFinished
+	eventSourceResultProduced = componentSource + "." + eventTypeResultProduced
+	eventSourceStarted        = componentSource + "." + eventTypeStarted
+)
+
 //
 // Private variables
 //
 
 var (
+	eventSinkTestMutex sync.Mutex
+
 	idsInvalid = []string{"", " ", ".", "a ", " a", "a.", ".a", "a..b", "a-b", "?"}
 	idsValid   = []string{"a", "0", "a.0", "0.1", "a.b.c", "abc.def", "0.1.2", "0.abc.1.def"}
 
@@ -300,4 +353,51 @@ func expectFilePathsInResults(c C, results []Result, paths []string) {
 			c.So(pathMap, ShouldContainKey, result.File().Path().String())
 		}
 	}
+}
+
+func resetGlobalEventSink() {
+	globalEventSink.mutex.Lock()
+
+	globalEventSink.allowedMap = make(map[string]bool)
+	globalEventSink.children = make([]EventSink, 0)
+
+	globalEventSink.mutex.Unlock()
+}
+
+func testEventMarshalUnmarshal(evt Event) Event {
+	var contents []byte
+	var err error
+	var unmarshalled = new(event)
+	contents, err = json.Marshal(evt)
+
+	So(err, ShouldBeNil)
+	So(contents, ShouldNotBeNil)
+
+	err = json.Unmarshal(contents, unmarshalled)
+
+	So(err, ShouldBeNil)
+
+	So(unmarshalled.Component(), ShouldEqual, evt.Component())
+	So(unmarshalled.Data(), ShouldResemble, evt.Data())
+	So(unmarshalled.Type(), ShouldEqual, evt.Type())
+
+	return unmarshalled
+}
+
+func validateSourceEvent(event Event, component, eventType, id string) {
+	Convey("it should create the correct event", func() {
+		So(event.Component(), ShouldEqual, component)
+		So(event.Data(), ShouldContainKey, eventFieldID)
+		So(event.Data()[eventFieldID], ShouldEqual, id)
+
+		if eventType == eventTypeResultProduced {
+			So((event.Data()[eventFieldError] != nil) || (event.Data()[eventFieldFile] != nil), ShouldBeTrue)
+		}
+
+		So(event.Type(), ShouldEqual, eventType)
+	})
+
+	Convey("it should be possible to marshal the event to JSON and unmarshal it", func() {
+		testEventMarshalUnmarshal(event)
+	})
 }

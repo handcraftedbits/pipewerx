@@ -36,6 +36,10 @@ func NewFilter(config FilterConfig, sources []Source, evaluator FileEvaluator) (
 		return nil, err
 	}
 
+	if isEventAllowedFrom(componentFilter) {
+		sendEvent(filterEventCreated(config.ID))
+	}
+
 	return &filter{
 		config:    config,
 		evaluator: evaluator,
@@ -55,6 +59,10 @@ type filter struct {
 }
 
 func (f *filter) destroy() error {
+	if isEventAllowedFrom(componentFilter) {
+		sendEvent(filterEventDestroyed(f.ID()))
+	}
+
 	return f.evaluator.Destroy()
 }
 
@@ -70,7 +78,17 @@ func (f *filter) Files(context Context) (<-chan Result, CancelFunc) {
 		var in <-chan Result
 		var sourceCancel CancelFunc
 
-		defer cancelHelper.finalize()
+		if isEventAllowedFrom(componentFilter) {
+			sendEvent(filterEventStarted(f.ID()))
+		}
+
+		defer func() {
+			cancelHelper.finalize()
+
+			if isEventAllowedFrom(componentFilter) {
+				sendEvent(filterEventFinished(f.ID()))
+			}
+		}()
 
 		in, sourceCancel = f.input.Files(context)
 
@@ -97,8 +115,15 @@ func (f *filter) Files(context Context) (<-chan Result, CancelFunc) {
 			if keep || res.Error() != nil {
 				select {
 				case out <- res:
+					if isEventAllowedFrom(componentFilter) {
+						sendEvent(filterEventResultProduced(f.ID(), res))
+					}
 
 				case <-cancel:
+					if isEventAllowedFrom(componentFilter) {
+						sendEvent(filterEventCancelled(f.ID()))
+					}
+
 					sourceCancel(nil)
 
 					return
@@ -112,4 +137,38 @@ func (f *filter) Files(context Context) (<-chan Result, CancelFunc) {
 
 func (f *filter) ID() string {
 	return f.config.ID
+}
+
+//
+// Private constants
+//
+
+const componentFilter = "filter"
+
+//
+// Private functions
+//
+
+func filterEventCancelled(id string) Event {
+	return newEvent(componentFilter, id, eventTypeCancelled)
+}
+
+func filterEventCreated(id string) Event {
+	return newEvent(componentFilter, id, eventTypeCreated)
+}
+
+func filterEventDestroyed(id string) Event {
+	return newEvent(componentFilter, id, eventTypeDestroyed)
+}
+
+func filterEventFinished(id string) Event {
+	return newEvent(componentFilter, id, eventTypeFinished)
+}
+
+func filterEventResultProduced(id string, result Result) Event {
+	return newResultProducedEvent(componentFilter, id, result)
+}
+
+func filterEventStarted(id string) Event {
+	return newEvent(componentFilter, id, eventTypeStarted)
 }

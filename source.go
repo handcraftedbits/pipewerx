@@ -39,6 +39,10 @@ func NewSource(config SourceConfig, fs Filesystem) (Source, error) {
 		return nil, err
 	}
 
+	if isEventAllowedFrom(componentSource) {
+		sendEvent(sourceEventCreated(config.ID))
+	}
+
 	return &source{
 		config: config,
 		fs:     fs,
@@ -108,7 +112,7 @@ func (merged *mergedSource) destroy() error {
 	}
 
 	if errs != nil {
-		return newMultiError(sourceMergedDestroyMessage, errs)
+		return newMultiError("an error occurred while destroying the source", errs)
 	}
 
 	return nil
@@ -130,12 +134,31 @@ func (src *source) Files(context Context) (<-chan Result, CancelFunc) {
 	go func() {
 		var err error
 		var file File
+		var res *result
 		var stepper *pathStepper
 
-		defer cancelHelper.finalize()
+		if isEventAllowedFrom(componentSource) {
+			sendEvent(sourceEventStarted(src.config.ID))
+		}
+
+		defer func() {
+			cancelHelper.finalize()
+
+			if isEventAllowedFrom(componentSource) {
+				sendEvent(sourceEventFinished(src.config.ID))
+			}
+		}()
 
 		if stepper, err = newPathStepper(src.fs, src.config.Root, src.config.Recurse); err != nil {
-			out <- &result{err: err}
+			res = &result{
+				err: err,
+			}
+
+			out <- res
+
+			if isEventAllowedFrom(componentSource) {
+				sendEvent(sourceEventResultProduced(src.config.ID, res))
+			}
 
 			return
 		}
@@ -147,10 +170,22 @@ func (src *source) Files(context Context) (<-chan Result, CancelFunc) {
 				return
 			}
 
+			res = &result{
+				err:  err,
+				file: file,
+			}
+
 			select {
-			case out <- &result{err: err, file: file}:
+			case out <- res:
+				if isEventAllowedFrom(componentSource) {
+					sendEvent(sourceEventResultProduced(src.config.ID, res))
+				}
 
 			case <-cancel:
+				if isEventAllowedFrom(componentSource) {
+					sendEvent(sourceEventCancelled(src.config.ID))
+				}
+
 				return
 			}
 		}
@@ -164,6 +199,10 @@ func (src *source) ID() string {
 }
 
 func (src *source) destroy() error {
+	if isEventAllowedFrom(componentSource) {
+		sendEvent(sourceEventDestroyed(src.config.ID))
+	}
+
 	return src.fs.Destroy()
 }
 
@@ -171,7 +210,7 @@ func (src *source) destroy() error {
 // Private constants
 //
 
-const sourceMergedDestroyMessage = "an error occurred while destroying the source"
+const componentSource = "source"
 
 //
 // Private functions
@@ -214,4 +253,28 @@ func newMergedSource(id string, sources []Source) (Source, error) {
 		id:      id,
 		sources: sanitizedSources,
 	}, nil
+}
+
+func sourceEventCancelled(id string) Event {
+	return newEvent(componentSource, id, eventTypeCancelled)
+}
+
+func sourceEventCreated(id string) Event {
+	return newEvent(componentSource, id, eventTypeCreated)
+}
+
+func sourceEventDestroyed(id string) Event {
+	return newEvent(componentSource, id, eventTypeDestroyed)
+}
+
+func sourceEventFinished(id string) Event {
+	return newEvent(componentSource, id, eventTypeFinished)
+}
+
+func sourceEventResultProduced(id string, result Result) Event {
+	return newResultProducedEvent(componentSource, id, result)
+}
+
+func sourceEventStarted(id string) Event {
+	return newEvent(componentSource, id, eventTypeStarted)
 }

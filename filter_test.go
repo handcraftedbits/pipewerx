@@ -15,10 +15,19 @@ import (
 // Filter tests
 
 func TestFilter(t *testing.T) {
+	eventSinkTestMutex.Lock()
+	defer eventSinkTestMutex.Unlock()
+
 	Convey("When creating a Filter", t, func() {
 		var err error
 		var filter Filter
+		var sink = &testEventSink{}
 		var source Source
+
+		Reset(resetGlobalEventSink)
+
+		RegisterEventSink(sink)
+		allowEventsFrom(componentFilter, true)
 
 		Convey("which uses a FileEvaluator that discards some files and returns an error on destroy", func() {
 			source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{
@@ -52,6 +61,10 @@ func TestFilter(t *testing.T) {
 
 				So(err, ShouldNotBeNil)
 				So(err.Error(), ShouldEqual, "destroy")
+
+				Convey("and the appropriate event should be sent", func() {
+					sink.expectEvents(eventFilterCreated, eventFilterDestroyed)
+				})
 			})
 
 			Convey("calling Files", func() {
@@ -62,6 +75,12 @@ func TestFilter(t *testing.T) {
 
 					expectFilePathsInResults(nil, results, []string{"file1.keep", "file2.keep", "file3.keep",
 						"file4.keep"})
+
+					Convey("and the appropriate events should be sent", func() {
+						sink.expectEvents(eventFilterCreated, eventFilterStarted, eventFilterResultProduced,
+							eventFilterResultProduced, eventFilterResultProduced, eventFilterResultProduced,
+							eventFilterFinished)
+					})
 				})
 
 				Convey("and cancelling should return the expected Results", func(c C) {
@@ -95,6 +114,11 @@ func TestFilter(t *testing.T) {
 					})
 
 					wg.Wait()
+
+					Convey("and the appropriate events should be sent", func() {
+						sink.expectEvents(eventFilterCreated, eventFilterStarted, eventFilterResultProduced,
+							eventFilterCancelled, eventFilterFinished)
+					})
 				})
 			})
 
@@ -128,15 +152,67 @@ func TestFilter(t *testing.T) {
 				So(results[0].File(), ShouldBeNil)
 				So(results[0].Error(), ShouldNotBeNil)
 				So(results[0].Error().Error(), ShouldEqual, "a fatal error occurred: shouldKeep")
+
+				Convey("and the appropriate events should be sent", func() {
+					sink.expectEvents(eventFilterCreated, eventFilterStarted, eventFilterResultProduced,
+						eventFilterFinished)
+				})
 			})
 		})
 	})
 }
 
+func TestFilterEvents(t *testing.T) {
+	var id = "filter"
+
+	Convey("When calling filterEventCancelled", t, func() {
+		validateSourceEvent(filterEventCancelled(id), componentFilter, eventTypeCancelled, id)
+	})
+
+	Convey("When calling filterEventCreated", t, func() {
+		validateSourceEvent(filterEventCreated(id), componentFilter, eventTypeCreated, id)
+	})
+
+	Convey("When calling filterEventDestroyed", t, func() {
+		validateSourceEvent(filterEventDestroyed(id), componentFilter, eventTypeDestroyed, id)
+	})
+
+	Convey("When calling filterEventFinished", t, func() {
+		validateSourceEvent(filterEventFinished(id), componentFilter, eventTypeFinished, id)
+	})
+
+	Convey("When calling filterEventResultProduced", t, func() {
+		var res = &result{
+			err: errors.New("result error"),
+			file: &file{
+				fileInfo: &nilFileInfo{
+					name: "name",
+				},
+				path: newFilePath(nil, "name", "/"),
+			},
+		}
+
+		validateSourceEvent(filterEventResultProduced(id, res), componentFilter, eventTypeResultProduced, id)
+	})
+
+	Convey("When calling filterEventStarted", t, func() {
+		validateSourceEvent(filterEventStarted(id), componentFilter, eventTypeStarted, id)
+	})
+}
+
 func TestNewFilter(t *testing.T) {
+	eventSinkTestMutex.Lock()
+	defer eventSinkTestMutex.Unlock()
+
 	Convey("When calling NewFilter", t, func() {
 		var err error
 		var filter Filter
+		var sink = &testEventSink{}
+
+		Reset(resetGlobalEventSink)
+
+		RegisterEventSink(sink)
+		allowEventsFrom(componentFilter, true)
 
 		Convey("it should succeed for valid IDs", func() {
 			var source Source
@@ -205,6 +281,10 @@ func TestNewFilter(t *testing.T) {
 
 			Convey("calling Destroy should not perform any action", func() {
 				So(filter.destroy(), ShouldBeNil)
+
+				Convey("and the appropriate event should be sent", func() {
+					sink.expectEvents(eventFilterCreated, eventFilterDestroyed)
+				})
 			})
 
 			Convey("calling Files should return all files", func() {
@@ -213,6 +293,11 @@ func TestNewFilter(t *testing.T) {
 				So(results, ShouldHaveLength, 2)
 
 				expectFilePathsInResults(nil, results, []string{"file1", "file2"})
+
+				Convey("and the appropriate events should be sent", func() {
+					sink.expectEvents(eventFilterCreated, eventFilterStarted, eventFilterResultProduced,
+						eventFilterResultProduced, eventFilterFinished)
+				})
 			})
 		})
 	})

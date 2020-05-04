@@ -93,6 +93,7 @@ func (helper *cancellationHelper) invoker() CancelFunc {
 	}
 }
 
+// TODO: replace with log events when ready.
 func (helper *cancellationHelper) logPanic(value interface{}) {
 	helper.logger.Warn().
 		Interface("error", value).
