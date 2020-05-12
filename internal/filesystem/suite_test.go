@@ -24,7 +24,7 @@ func TestSuiteFilesystem(t *testing.T) {
 //
 
 var _ = BeforeSuite(func() {
-	portSamba = testutil.StartSambaContainer2(docker, testutil.TestdataPathFilesystem)
+	portSamba = testutil.StartSambaContainer(docker, testutil.TestdataPathFilesystem)
 })
 
 var _ = AfterSuite(func() {

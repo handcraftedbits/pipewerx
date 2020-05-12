@@ -20,16 +20,6 @@ import (
 
 var _ = Describe("Docker", func() {
 	Describe("given a new instance", func() {
-		var docker *Docker
-
-		BeforeEach(func() {
-			docker = NewDocker("")
-		})
-
-		AfterEach(func() {
-			docker.Destroy()
-		})
-
 		Describe("calling grepLogs", func() {
 			var err error
 			var result bool
@@ -232,11 +222,7 @@ var _ = Describe("DockerRun", func() {
 var _ = Describe("StartSambaContainer", func() {
 	Describe("calling StartSambaContainer", func() {
 		It("should succeed", func() {
-			var docker = NewDocker("")
-
-			defer docker.Destroy()
-
-			StartSambaContainer2(docker, TestdataPathFilesystem)
+			StartSambaContainer(docker, TestdataPathFilesystem)
 		})
 	})
 })

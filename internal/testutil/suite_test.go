@@ -16,3 +16,21 @@ func TestSuiteTestutil(t *testing.T) {
 
 	RunSpecs(t, "testutil")
 }
+
+//
+// Suite helpers
+//
+
+var _ = BeforeSuite(func() {
+	docker = NewDocker("")
+})
+
+var _ = AfterSuite(func() {
+	docker.Destroy()
+})
+
+//
+// Private variables
+//
+
+var docker *Docker

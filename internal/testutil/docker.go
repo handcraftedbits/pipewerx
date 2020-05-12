@@ -193,7 +193,7 @@ func NewDocker(endpoint string) *Docker {
 	return docker
 }
 
-func StartSambaContainer2(docker *Docker, absPath string) int {
+func StartSambaContainer(docker *Docker, absPath string) int {
 	var err error
 	var port int
 	var resourceName = "samba"
