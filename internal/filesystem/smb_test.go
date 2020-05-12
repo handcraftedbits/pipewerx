@@ -3,12 +3,12 @@ package filesystem // import "golang.handcraftedbits.com/pipewerx/internal/files
 import (
 	"io"
 	"os"
-	"testing"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 
 	"golang.handcraftedbits.com/pipewerx"
 	"golang.handcraftedbits.com/pipewerx/internal/testutil"
-
-	. "github.com/smartystreets/goconvey/convey"
 )
 
 //
@@ -17,9 +17,9 @@ import (
 
 // SMB filesystem tests
 
-func TestNewSMB(t *testing.T) {
-	Convey("When calling SMB", t, func() {
-		Convey("it should return an error if an error occurs while creating the Samba context", func() {
+var _ = Describe("SMB Filesystem", func() {
+	Describe("calling SMB", func() {
+		It("should return an error if an error occurs while creating the Samba context", func() {
 			var err error
 			var fs pipewerx.Filesystem
 
@@ -27,157 +27,153 @@ func TestNewSMB(t *testing.T) {
 				EnableTestConditions: true,
 			})
 
-			So(fs, ShouldBeNil)
-			So(err, ShouldNotBeNil)
-		})
-	})
-}
-
-func TestSMB(t *testing.T) {
-	var docker = testutil.NewDocker("")
-	var port int
-
-	defer docker.Destroy()
-
-	Convey("Starting Samba Docker container should succeed", t, func() {
-		port = testutil.StartSambaContainer(docker, testutil.TestdataPathFilesystem)
-	})
-
-	Convey("When creating an SMB Filesystem with test conditions enabled", t, func() {
-		var err error
-		var fs pipewerx.Filesystem
-		var ok bool
-		var smbFS *smb
-
-		fs, err = SMB(newSMBConfig(port))
-
-		So(err, ShouldBeNil)
-		So(fs, ShouldNotBeNil)
-
-		smbFS, ok = fs.(*smb)
-
-		So(ok, ShouldBeTrue)
-
-		smbFS.config.EnableTestConditions = true
-
-		defer func() {
-			smbFS.config.EnableTestConditions = false
-
-			err = fs.Destroy()
-
-			So(err, ShouldBeNil)
-		}()
-
-		Convey("calling Destroy on an SMB Filesystem should return an error", func() {
-			err = fs.Destroy()
-
-			So(err, ShouldNotBeNil)
-		})
-
-		Convey("calling ListFiles should return an error", func() {
-			var fileInfos []os.FileInfo
-
-			fileInfos, err = fs.ListFiles("filesOnly")
-
-			So(fileInfos, ShouldBeNil)
-			So(err, ShouldNotBeNil)
+			Expect(fs).To(BeNil())
+			Expect(err).NotTo(BeNil())
 		})
 	})
 
-	Convey("Calling ListFiles on an SMB Filesystem should return an error if an error occurs", t, func() {
-		var err error
-		var fs pipewerx.Filesystem
-		var ok bool
-		var smbFS *smb
+	Describe("given a new instance", func() {
+		Context("with test conditions enabled", func() {
+			var err error
+			var fs pipewerx.Filesystem
+			var smbFS *smb
 
-		fs, err = SMB(SMBConfig{})
+			BeforeEach(func() {
+				var ok bool
 
-		So(err, ShouldBeNil)
-		So(fs, ShouldNotBeNil)
+				fs, err = SMB(newSMBConfig(portSamba))
 
-		smbFS, ok = fs.(*smb)
+				Expect(err).To(BeNil())
+				Expect(fs).NotTo(BeNil())
 
-		So(ok, ShouldBeTrue)
+				smbFS, ok = fs.(*smb)
 
-		smbFS.config.EnableTestConditions = true
+				Expect(ok).To(BeTrue())
 
-		err = fs.Destroy()
+				smbFS.config.EnableTestConditions = true
+			})
 
-		So(err, ShouldNotBeNil)
+			AfterEach(func() {
+				smbFS.config.EnableTestConditions = false
 
-		smbFS.config.EnableTestConditions = false
+				err = fs.Destroy()
 
-		err = fs.Destroy()
+				Expect(err).To(BeNil())
+			})
 
-		So(err, ShouldBeNil)
+			Describe("calling Destroy", func() {
+				It("should return an error", func() {
+					err = fs.Destroy()
+
+					Expect(err).NotTo(BeNil())
+				})
+			})
+
+			Describe("calling ListFiles", func() {
+				It("should return an error", func() {
+					var fileInfos []os.FileInfo
+
+					fileInfos, err = fs.ListFiles("filesOnly")
+
+					Expect(fileInfos).To(BeNil())
+					Expect(err).NotTo(BeNil())
+				})
+			})
+		})
 	})
+})
 
-	testFilesystem(t, testFilesystemConfig{
-		createFunc: func() (pipewerx.Filesystem, error) {
-			return SMB(newSMBConfig(port))
-		},
-		name: "an SMB",
-		realPath: func(root, path string) string {
-			return path
-		},
-	})
-}
+var _ = testFilesystem(testFilesystemConfig{
+	createFunc: func() (pipewerx.Filesystem, error) {
+		return SMB(newSMBConfig(portSamba))
+	},
+	name: "SMB",
+	realPath: func(root, path string) string {
+		return path
+	},
+})
 
 // smbReadCloser tests
 
-func TestSMBReadCloser(t *testing.T) {
-	Convey("When creating an smbReadCloser with no file handle", t, func() {
-		var err error
-		var fs pipewerx.Filesystem
-		var ok bool
-		var reader io.ReadCloser
-		var smbFS *smb
+var _ = Describe("smbReadCloser", func() {
+	Describe("given a new instance", func() {
+		Context("with a nil file handle", func() {
+			var err error
+			var fs pipewerx.Filesystem
+			var reader io.ReadCloser
 
-		fs, err = SMB(SMBConfig{})
+			BeforeEach(func() {
+				var ok bool
+				var smbFS *smb
 
-		So(err, ShouldBeNil)
-		So(fs, ShouldNotBeNil)
+				fs, err = SMB(SMBConfig{})
 
-		smbFS, ok = fs.(*smb)
+				Expect(err).To(BeNil())
+				Expect(fs).NotTo(BeNil())
 
-		So(ok, ShouldBeTrue)
+				smbFS, ok = fs.(*smb)
 
-		reader = &smbReadCloser{
-			cContext:    smbFS.cContext,
-			cFileHandle: nil,
-		}
+				Expect(ok).To(BeTrue())
 
-		defer func() {
-			err = fs.Destroy()
-
-			So(err, ShouldBeNil)
-		}()
-
-		Convey("calling Close should return an error", func() {
-			So(reader.Close(), ShouldNotBeNil)
-		})
-
-		Convey("calling Read", func() {
-			var amountRead int
-
-			Convey("with a nil or empty byte array should return zero bytes read and no error", func() {
-				amountRead, err = reader.Read(nil)
-
-				So(amountRead, ShouldEqual, 0)
-				So(err, ShouldBeNil)
-
-				amountRead, err = reader.Read([]byte{})
-
-				So(amountRead, ShouldEqual, 0)
-				So(err, ShouldBeNil)
+				reader = &smbReadCloser{
+					cContext:    smbFS.cContext,
+					cFileHandle: nil,
+				}
 			})
 
-			Convey("with a valid byte array should return an error", func() {
-				amountRead, err = reader.Read(make([]byte, 10))
+			AfterEach(func() {
+				err = fs.Destroy()
 
-				So(amountRead, ShouldBeLessThan, 0)
-				So(err, ShouldNotBeNil)
+				Expect(err).To(BeNil())
+			})
+
+			Describe("calling Close", func() {
+				It("should return an error", func() {
+					Expect(reader.Close()).NotTo(BeNil())
+				})
+			})
+
+			Describe("calling Read", func() {
+				var amountRead int
+
+				Context("with a nil or empty byte array", func() {
+					It("should return zero bytes read and no error", func() {
+						amountRead, err = reader.Read(nil)
+
+						Expect(amountRead).To(Equal(0))
+						Expect(err).To(BeNil())
+
+						amountRead, err = reader.Read([]byte{})
+
+						Expect(amountRead).To(Equal(0))
+						Expect(err).To(BeNil())
+					})
+				})
+
+				Context("with a valid byte array", func() {
+					It("should return an error", func() {
+						amountRead, err = reader.Read(make([]byte, 10))
+
+						Expect(amountRead < 0).To(BeTrue())
+						Expect(err).NotTo(BeNil())
+					})
+				})
 			})
 		})
 	})
+})
+
+//
+// Private functions
+//
+
+func newSMBConfig(port int) SMBConfig {
+	return SMBConfig{
+		Domain:   testutil.ConstSMBDomain,
+		Host:     "localhost",
+		Password: testutil.ConstSMBPassword,
+		Port:     port,
+		Share:    testutil.ConstSMBShare,
+		Username: testutil.ConstSMBUser,
+	}
 }

@@ -2,9 +2,12 @@ package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 
 import (
 	"errors"
-	"testing"
+	"fmt"
+	"math/rand"
+	"sync"
 
-	. "github.com/smartystreets/goconvey/convey"
+	g "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 //
@@ -13,66 +16,116 @@ import (
 
 // MultiError tests
 
-func TestMultiError(t *testing.T) {
-	Convey("When creating a MultiError", t, func() {
-		var err = newMultiError("message", []error{errors.New("error1"), errors.New("error2")})
+var _ = g.Describe("MultiError", func() {
+	g.Describe("calling newMultiError", func() {
+		var err MultiError
 
-		So(err, ShouldNotBeNil)
+		g.Context("with a nil causes array", func() {
+			g.BeforeEach(func() {
+				err = newMultiError("message", nil)
+			})
 
-		Convey("calling Causes should return the expected value", func() {
-			So(err.Causes(), ShouldNotBeNil)
-			So(err.Causes(), ShouldHaveLength, 2)
-			So(err.Causes()[0], ShouldNotBeNil)
-			So(err.Causes()[0].Error(), ShouldEqual, "error1")
-			So(err.Causes()[1], ShouldNotBeNil)
-			So(err.Causes()[1].Error(), ShouldEqual, "error2")
+			g.It("should succeed", func() {
+				Expect(err).NotTo(BeNil())
+			})
+
+			g.Describe("and then calling Causes", func() {
+				g.It("should return an empty causes array", func() {
+					Expect(err.Causes()).NotTo(BeNil())
+					Expect(err.Causes()).To(HaveLen(0))
+				})
+			})
 		})
 
-		Convey("calling Error should return the expected message", func() {
-			So(err.Error(), ShouldEqual, "message")
+		g.Context("with a normal causes array", func() {
+			g.BeforeEach(func() {
+				err = newMultiError("message", []error{errors.New("error1"), errors.New("error2")})
+			})
+
+			g.It("should succeed", func() {
+				Expect(err).NotTo(BeNil())
+			})
+
+			g.Describe("and then calling Causes", func() {
+				g.It("should return the expected set of errors", func() {
+					Expect(err.Causes()).NotTo(BeNil())
+					Expect(err.Causes()).To(HaveLen(2))
+					Expect(err.Causes()[0]).NotTo(BeNil())
+					Expect(err.Causes()[0].Error()).To(Equal("error1"))
+					Expect(err.Causes()[1]).NotTo(BeNil())
+					Expect(err.Causes()[1].Error()).To(Equal("error2"))
+				})
+			})
+
+			g.Describe("calling Error", func() {
+				g.It("should return the expected error message", func() {
+					Expect(err.Error()).To(Equal("message"))
+				})
+			})
 		})
 	})
-}
+})
 
-func TestNewMultiError(t *testing.T) {
-	Convey("When calling newMultiError with a nil causes array", t, func() {
-		var err = newMultiError("message", nil)
+// Other error tests
 
-		Convey("it should create a MultiError with an empty causes array", func() {
-			So(err, ShouldNotBeNil)
-			So(err.Causes(), ShouldNotBeNil)
-			So(err.Causes(), ShouldHaveLength, 0)
-		})
-	})
-}
-
-// Other error test
-
-func TestNewPanicError(t *testing.T) {
-	Convey("When calling newPanicError with a non-error value", t, func() {
-		var err = newPanicError("test")
-
-		Convey("it should produce a simple error", func() {
-			So(err, ShouldNotBeNil)
-			So(err.Error(), ShouldEqual, "a fatal error occurred: test")
-		})
-	})
-
-	Convey("When calling newPanicError with an error value", t, func() {
+var _ = g.Describe("newPanicError", func() {
+	g.Describe("calling newPanicError", func() {
 		var err error
-		var wrapped = errors.New("test")
 
-		err = newPanicError(wrapped)
+		g.Context("with a non-error value", func() {
+			g.BeforeEach(func() {
+				err = newPanicError("test")
+			})
 
-		Convey("it should produce an error with a wrapped value", func() {
-			var unwrapped wrappedError
+			g.It("should return a normal error", func() {
+				Expect(err).NotTo(BeNil())
+				Expect(err.Error()).To(Equal("a fatal error occurred: test"))
+			})
+		})
 
-			So(err, ShouldNotBeNil)
-			So(err, ShouldImplement, (*wrappedError)(nil))
+		g.Context("with an error value", func() {
+			var wrapped error
 
-			unwrapped = err.(wrappedError)
+			g.BeforeEach(func() {
+				wrapped = errors.New("test")
+				err = newPanicError(wrapped)
+			})
 
-			So(unwrapped.Unwrap(), ShouldEqual, wrapped)
+			g.It("should return an error with a wrapped value", func() {
+				var ok bool
+				var unwrapped wrappedError
+
+				Expect(err).NotTo(BeNil())
+
+				unwrapped, ok = err.(wrappedError)
+
+				Expect(ok).To(BeTrue())
+				Expect(unwrapped.Unwrap()).To(Equal(wrapped))
+			})
 		})
 	})
+})
+
+//
+// Private types
+//
+
+// Simple interface used to unwrap a wrapped error returned from fmt.Errorf().
+type wrappedError interface {
+	error
+
+	Unwrap() error
+}
+
+//
+// Private functions
+//
+
+func newTestEventSink() *testEventSink {
+	var id = fmt.Sprintf("%d", rand.Int())
+
+	return &testEventSink{
+		id:    id,
+		mutex: sync.Mutex{},
+	}
 }

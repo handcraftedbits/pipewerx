@@ -39,7 +39,7 @@ func NewSource(config SourceConfig, fs Filesystem) (Source, error) {
 		return nil, err
 	}
 
-	if isEventAllowedFrom(componentSource) {
+	if eventAllowedFrom(componentSource) {
 		sendEvent(sourceEventCreated(config.ID))
 	}
 
@@ -137,16 +137,16 @@ func (src *source) Files(context Context) (<-chan Result, CancelFunc) {
 		var res *result
 		var stepper *pathStepper
 
-		if isEventAllowedFrom(componentSource) {
+		if eventAllowedFrom(componentSource) {
 			sendEvent(sourceEventStarted(src.config.ID))
 		}
 
 		defer func() {
-			cancelHelper.finalize()
-
-			if isEventAllowedFrom(componentSource) {
+			if eventAllowedFrom(componentSource) {
 				sendEvent(sourceEventFinished(src.config.ID))
 			}
+
+			cancelHelper.finalize()
 		}()
 
 		if stepper, err = newPathStepper(src.fs, src.config.Root, src.config.Recurse); err != nil {
@@ -156,7 +156,7 @@ func (src *source) Files(context Context) (<-chan Result, CancelFunc) {
 
 			out <- res
 
-			if isEventAllowedFrom(componentSource) {
+			if eventAllowedFrom(componentSource) {
 				sendEvent(sourceEventResultProduced(src.config.ID, res))
 			}
 
@@ -177,12 +177,12 @@ func (src *source) Files(context Context) (<-chan Result, CancelFunc) {
 
 			select {
 			case out <- res:
-				if isEventAllowedFrom(componentSource) {
+				if eventAllowedFrom(componentSource) {
 					sendEvent(sourceEventResultProduced(src.config.ID, res))
 				}
 
 			case <-cancel:
-				if isEventAllowedFrom(componentSource) {
+				if eventAllowedFrom(componentSource) {
 					sendEvent(sourceEventCancelled(src.config.ID))
 				}
 
@@ -199,7 +199,7 @@ func (src *source) ID() string {
 }
 
 func (src *source) destroy() error {
-	if isEventAllowedFrom(componentSource) {
+	if eventAllowedFrom(componentSource) {
 		sendEvent(sourceEventDestroyed(src.config.ID))
 	}
 

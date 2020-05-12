@@ -2,7 +2,6 @@ package source // import "golang.handcraftedbits.com/pipewerx/source"
 
 import (
 	"os"
-	"testing"
 
 	"golang.handcraftedbits.com/pipewerx"
 )
@@ -13,19 +12,17 @@ import (
 
 // Local Source tests
 
-func TestLocal(t *testing.T) {
-	testSource(t, testSourceConfig{
-		createFunc: func(id, root string, recurse bool) (pipewerx.Source, error) {
-			return Local(LocalConfig{
-				ID:      id,
-				Recurse: recurse,
-				Root:    root,
-			})
-		},
-		name:          "a local",
-		pathSeparator: "/",
-		realPath: func(root, path string) string {
-			return root + string(os.PathSeparator) + path
-		},
-	})
-}
+var _ = testSource(testSourceConfig{
+	createFunc: func(id, root string, recurse bool) (pipewerx.Source, error) {
+		return Local(LocalConfig{
+			ID:      id,
+			Recurse: recurse,
+			Root:    root,
+		})
+	},
+	name:          "Local",
+	pathSeparator: "/",
+	realPath: func(root, path string) string {
+		return root + string(os.PathSeparator) + path
+	},
+})

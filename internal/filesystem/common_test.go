@@ -2,10 +2,10 @@ package filesystem // import "golang.handcraftedbits.com/pipewerx/internal/files
 
 import (
 	"os"
-	"testing"
 	"time"
 
-	. "github.com/smartystreets/goconvey/convey"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 //
@@ -14,41 +14,55 @@ import (
 
 // fileInfo tests
 
-// smbFileInfo tests
+var _ = Describe("fileInfo", func() {
+	Describe("given a new instance", func() {
+		var fi *fileInfo
+		var now time.Time
 
-func TestFileInfo(t *testing.T) {
-	var now = time.Now()
-
-	Convey("When creating a fileInfo", t, func() {
-		var fi = &fileInfo{
-			mode:    os.ModeDir,
-			modTime: now,
-			name:    "name",
-			size:    1,
-		}
-
-		Convey("calling IsDir should return the expected value", func() {
-			So(fi.IsDir(), ShouldBeTrue)
+		BeforeEach(func() {
+			now = time.Now()
+			fi = &fileInfo{
+				mode:    os.ModeDir,
+				modTime: now,
+				name:    "name",
+				size:    1,
+			}
 		})
 
-		Convey("calling Mode should return the expected value", func() {
-			So(fi.Mode(), ShouldEqual, os.ModeDir)
+		Describe("calling IsDir", func() {
+			It("should return the expected value", func() {
+				Expect(fi.IsDir()).To(BeTrue())
+			})
 		})
 
-		Convey("calling ModTime should return the expected value", func() {
-			So(fi.ModTime(), ShouldEqual, now)
+		Describe("calling Mode", func() {
+			It("should return the expected mod", func() {
+				Expect(fi.Mode()).To(Equal(os.ModeDir))
+			})
 		})
 
-		Convey("calling Name should return the expected value", func() {
-			So(fi.Name(), ShouldEqual, "name")
+		Describe("calling ModTime", func() {
+			It("should return the expected modification time", func() {
+				Expect(fi.ModTime()).To(Equal(now))
+			})
 		})
 
-		Convey("calling Size should return the expected value", func() {
-			So(fi.Size(), ShouldEqual, 1)
+		Describe("calling Name", func() {
+			It("should return the expected name", func() {
+				Expect(fi.Name()).To(Equal("name"))
+			})
 		})
 
-		Convey("calling Sys should return the expected value", func() {
-			So(fi.Sys(), ShouldEqual, nil)
+		Describe("calling Size", func() {
+			It("should return the expected size", func() {
+				Expect(fi.Size()).To(Equal(int64(1)))
+			})
+		})
+
+		Describe("calling Sys", func() {
+			It("should return the expected value", func() {
+				Expect(fi.Sys()).To(BeNil())
+			})
 		})
 	})
-}
+})

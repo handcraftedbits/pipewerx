@@ -3,9 +3,9 @@ package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 import (
 	"errors"
 	"sync"
-	"testing"
 
-	. "github.com/smartystreets/goconvey/convey"
+	g "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 //
@@ -14,16 +14,248 @@ import (
 
 // mergedSource tests
 
-func TestMergedSource(t *testing.T) {
-	Convey("When creating a mergedSource", t, func() {
+var _ = g.Describe("mergedSource", func() {
+	g.Describe("given a new instance", func() {
 		var err error
 		var merged Source
 
-		Convey("which contains a number of Sources, each of which have a Filesystem that does nothing when destroyed",
-			func() {
-				var source [2]Source
+		g.Context("which contains a number of Sources", func() {
+			g.Context("each of which have a Filesystem that does nothing when destroyed", func() {
+				g.BeforeEach(func() {
+					var source [2]Source
 
-				source[0], err = NewSource(SourceConfig{ID: "source0"}, &memFilesystem{
+					source[0], err = NewSource(SourceConfig{ID: "source0"}, &memFilesystem{
+						root: &memFilesystemNode{
+							children: map[string]*memFilesystemNode{
+								"file1": {},
+							},
+						},
+					})
+
+					Expect(err).To(BeNil())
+					Expect(source[0]).NotTo(BeNil())
+
+					source[1], err = NewSource(SourceConfig{ID: "source1"}, &memFilesystem{
+						root: &memFilesystemNode{
+							children: map[string]*memFilesystemNode{
+								"file2": {},
+							},
+						},
+					})
+
+					Expect(err).To(BeNil())
+					Expect(source[1]).NotTo(BeNil())
+
+					merged, err = newMergedSource("merged", []Source{source[0], source[1]})
+
+					Expect(err).To(BeNil())
+					Expect(merged).NotTo(BeNil())
+				})
+
+				g.Describe("calling destroy", func() {
+					g.It("should return nil", func() {
+						Expect(merged.destroy()).To(BeNil())
+					})
+				})
+			})
+
+			g.Context("most of which have a Filesystem that performs an action when destroyed", func() {
+				var expected = []string{"file01", "file02", "file03", "file04", "file05", "file06", "file07", "file08",
+					"file09", "file10", "file11", "file12", "file13", "file14", "file15"}
+
+				g.BeforeEach(func() {
+					var source [3]Source
+
+					source[0], err = NewSource(SourceConfig{
+						ID: "source1",
+					}, &memFilesystem{
+						destroy: func() error {
+							return errors.New("source1")
+						},
+						root: &memFilesystemNode{
+							children: map[string]*memFilesystemNode{
+								"file01": {},
+								"file02": {},
+								"file03": {},
+								"file04": {},
+								"file05": {},
+							},
+						},
+					})
+
+					Expect(err).To(BeNil())
+					Expect(source[0]).NotTo(BeNil())
+
+					source[1], err = NewSource(SourceConfig{
+						ID: "source2",
+					}, &memFilesystem{
+						destroy: func() error {
+							return errors.New("source2")
+						},
+						root: &memFilesystemNode{
+							children: map[string]*memFilesystemNode{
+								"file06": {},
+								"file07": {},
+								"file08": {},
+								"file09": {},
+								"file10": {},
+							},
+						},
+					})
+
+					Expect(err).To(BeNil())
+					Expect(source[1]).NotTo(BeNil())
+
+					source[2], err = NewSource(SourceConfig{
+						ID: "source3",
+					}, &memFilesystem{
+						root: &memFilesystemNode{
+							children: map[string]*memFilesystemNode{
+								"file11": {},
+								"file12": {},
+								"file13": {},
+								"file14": {},
+								"file15": {},
+							},
+						},
+					})
+
+					Expect(err).To(BeNil())
+					Expect(source[2]).NotTo(BeNil())
+
+					merged, err = newMergedSource("merged", []Source{source[0], source[1], source[2]})
+
+					Expect(err).To(BeNil())
+					Expect(merged).NotTo(BeNil())
+				})
+
+				g.Describe("calling destroy", func() {
+					g.It("should return multiple errors", func() {
+						var multiErr MultiError
+						var ok bool
+
+						err = merged.destroy()
+
+						Expect(err).NotTo(BeNil())
+
+						multiErr, ok = err.(MultiError)
+
+						Expect(ok).To(BeTrue())
+
+						Expect(multiErr.Causes()).NotTo(BeNil())
+						Expect(multiErr.Causes()).To(HaveLen(2))
+						Expect(multiErr.Causes()[0].Error()).To(Equal("source1"))
+						Expect(multiErr.Causes()[1].Error()).To(Equal("source2"))
+					})
+				})
+
+				g.Describe("calling Files", func() {
+					var results []Result
+
+					g.Context("without cancelling", func() {
+						g.It("should return the expected Results", func() {
+							results = collectSourceResults(merged)
+
+							Expect(results).To(HaveLen(15))
+							Expect(results).To(haveAllOrSomeOfTheseFilePaths(expected...))
+						})
+					})
+
+					g.Context("and cancelling", func() {
+						g.It("should return the expected Results", func() {
+							var cancel CancelFunc
+							var in <-chan Result
+							var wg sync.WaitGroup
+
+							results = make([]Result, 0)
+
+							in, cancel = merged.Files(NewContext(ContextConfig{}))
+
+							results = append(results, <-in)
+							results = append(results, <-in)
+
+							wg.Add(1)
+
+							cancel(func() {
+								var names []string
+
+								for result := range in {
+									results = append(results, result)
+
+									names = append(names, result.File().Path().String())
+								}
+
+								Expect(results).To(HaveLen(2))
+								Expect(results).To(haveAllOrSomeOfTheseFilePaths(expected...))
+
+								wg.Done()
+							})
+
+							wg.Wait()
+						})
+					})
+				})
+
+				g.Describe("calling ID", func() {
+					g.It("should return the expected ID", func() {
+						Expect(merged.ID()).To(Equal("merged"))
+					})
+				})
+			})
+		})
+	})
+})
+
+var _ = g.Describe("newMergedSource", func() {
+	g.Describe("when calling newMergedSource", func() {
+		var err error
+		var merged Source
+
+		g.Context("with a nil Source array", func() {
+			g.It("should return an error", func() {
+				merged, err = newMergedSource("merged", nil)
+
+				Expect(merged).To(BeNil())
+				Expect(err).NotTo(BeNil())
+				Expect(errors.Is(err, errSourceNone)).To(BeTrue())
+			})
+		})
+
+		g.Context("with an empty Source array", func() {
+			g.It("should return an error", func() {
+				merged, err = newMergedSource("merged", []Source{})
+
+				Expect(merged).To(BeNil())
+				Expect(err).NotTo(BeNil())
+				Expect(errors.Is(err, errSourceNone)).To(BeTrue())
+			})
+		})
+
+		g.Context("with a single Source", func() {
+			var source Source
+
+			g.BeforeEach(func() {
+				source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{})
+
+				Expect(err).To(BeNil())
+				Expect(source).NotTo(BeNil())
+			})
+
+			g.It("should return the same Source", func() {
+				merged, err = newMergedSource("merged", []Source{source})
+
+				Expect(err).To(BeNil())
+				Expect(merged).NotTo(BeNil())
+				Expect(merged).To(Equal(source))
+			})
+		})
+
+		g.Context("with duplicate Sources", func() {
+			var source1 Source
+			var source2 Source
+
+			g.BeforeEach(func() {
+				source1, err = NewSource(SourceConfig{ID: "source1"}, &memFilesystem{
 					root: &memFilesystemNode{
 						children: map[string]*memFilesystemNode{
 							"file1": {},
@@ -31,10 +263,10 @@ func TestMergedSource(t *testing.T) {
 					},
 				})
 
-				So(err, ShouldBeNil)
-				So(source[0], ShouldNotBeNil)
+				Expect(err).To(BeNil())
+				Expect(source1).NotTo(BeNil())
 
-				source[1], err = NewSource(SourceConfig{ID: "source1"}, &memFilesystem{
+				source2, err = NewSource(SourceConfig{ID: "source2"}, &memFilesystem{
 					root: &memFilesystemNode{
 						children: map[string]*memFilesystemNode{
 							"file2": {},
@@ -42,501 +274,326 @@ func TestMergedSource(t *testing.T) {
 					},
 				})
 
-				So(err, ShouldBeNil)
-				So(source[1], ShouldNotBeNil)
-
-				merged, err = newMergedSource("merged", []Source{source[0], source[1]})
-
-				So(err, ShouldBeNil)
-				So(merged, ShouldNotBeNil)
-
-				Convey("calling destroy should return nil", func() {
-					So(merged.destroy(), ShouldEqual, nil)
-				})
+				Expect(err).To(BeNil())
+				Expect(source2).NotTo(BeNil())
 			})
 
-		Convey("which contains a number of Sources, most of which have a Filesystem that performs an action when "+
-			"destroyed", func() {
-			var expected = []string{"file01", "file02", "file03", "file04", "file05", "file06", "file07", "file08",
-				"file09", "file10", "file11", "file12", "file13", "file14", "file15"}
-			var source [3]Source
-
-			source[0], err = NewSource(SourceConfig{
-				ID: "source1",
-			}, &memFilesystem{
-				destroy: func() error {
-					return errors.New("source1")
-				},
-				root: &memFilesystemNode{
-					children: map[string]*memFilesystemNode{
-						"file01": {},
-						"file02": {},
-						"file03": {},
-						"file04": {},
-						"file05": {},
-					},
-				},
-			})
-
-			So(err, ShouldBeNil)
-			So(source[0], ShouldNotBeNil)
-
-			source[1], err = NewSource(SourceConfig{
-				ID: "source2",
-			}, &memFilesystem{
-				destroy: func() error {
-					return errors.New("source2")
-				},
-				root: &memFilesystemNode{
-					children: map[string]*memFilesystemNode{
-						"file06": {},
-						"file07": {},
-						"file08": {},
-						"file09": {},
-						"file10": {},
-					},
-				},
-			})
-
-			So(err, ShouldBeNil)
-			So(source[1], ShouldNotBeNil)
-
-			source[2], err = NewSource(SourceConfig{
-				ID: "source3",
-			}, &memFilesystem{
-				root: &memFilesystemNode{
-					children: map[string]*memFilesystemNode{
-						"file11": {},
-						"file12": {},
-						"file13": {},
-						"file14": {},
-						"file15": {},
-					},
-				},
-			})
-
-			So(err, ShouldBeNil)
-			So(source[2], ShouldNotBeNil)
-
-			merged, err = newMergedSource("merged", []Source{source[0], source[1], source[2]})
-
-			So(err, ShouldBeNil)
-			So(merged, ShouldNotBeNil)
-
-			Convey("calling destroy should return the expected value", func() {
-				var multiErr MultiError
-
-				err = merged.destroy()
-
-				So(err, ShouldNotBeNil)
-				So(err, ShouldImplement, (*MultiError)(nil))
-
-				multiErr = err.(MultiError)
-
-				So(multiErr.Causes(), ShouldHaveLength, 2)
-				So(multiErr.Causes()[0].Error(), ShouldEqual, "source1")
-				So(multiErr.Causes()[1].Error(), ShouldEqual, "source2")
-			})
-
-			Convey("calling Files", func() {
+			g.It("should discard the duplicates", func() {
 				var results []Result
 
-				Convey("should return the expected Results", func() {
-					results = collectSourceResults(merged)
+				merged, err = newMergedSource("merged", []Source{source1, source2, source1, source2})
 
-					So(results, ShouldHaveLength, 15)
-
-					expectFilePathsInResults(nil, results, expected)
-				})
-
-				Convey("and cancelling should return the expected Results", func(c C) {
-					var cancel CancelFunc
-					var in <-chan Result
-					var wg sync.WaitGroup
-
-					results = make([]Result, 0)
-
-					in, cancel = merged.Files(NewContext(ContextConfig{}))
-
-					results = append(results, <-in)
-					results = append(results, <-in)
-
-					wg.Add(1)
-
-					cancel(func() {
-						var names []string
-
-						for result := range in {
-							results = append(results, result)
-
-							names = append(names, result.File().Path().String())
-						}
-
-						c.So(results, ShouldHaveLength, 2)
-
-						expectFilePathsInResults(c, results, expected)
-
-						wg.Done()
-					})
-
-					wg.Wait()
-				})
-			})
-
-			Convey("calling ID should return the expected ID", func() {
-				So(merged.ID(), ShouldEqual, "merged")
-			})
-		})
-	})
-}
-
-func TestNewMergedSource(t *testing.T) {
-	Convey("When calling newMergedSource", t, func() {
-		var err error
-		var merged Source
-
-		Convey("with a nil Source array", func() {
-			merged, err = newMergedSource("merged", nil)
-
-			Convey("it should return an error", func() {
-				So(merged, ShouldBeNil)
-				So(err, ShouldNotBeNil)
-				So(errors.Is(err, errSourceNone), ShouldBeTrue)
-			})
-		})
-
-		Convey("with an empty Source array", func() {
-			merged, err = newMergedSource("merged", []Source{})
-
-			Convey("it should return an error", func() {
-				So(merged, ShouldBeNil)
-				So(err, ShouldNotBeNil)
-				So(errors.Is(err, errSourceNone), ShouldBeTrue)
-			})
-		})
-
-		Convey("with a single Source", func() {
-			var source Source
-
-			source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{})
-
-			So(err, ShouldBeNil)
-			So(source, ShouldNotBeNil)
-
-			merged, err = newMergedSource("merged", []Source{source})
-
-			Convey("it should return the same Source", func() {
-				So(err, ShouldBeNil)
-				So(merged, ShouldNotBeNil)
-				So(merged, ShouldEqual, source)
-			})
-		})
-
-		Convey("with duplicate Sources", func() {
-			var source1 Source
-			var source2 Source
-
-			source1, err = NewSource(SourceConfig{ID: "source1"}, &memFilesystem{
-				root: &memFilesystemNode{
-					children: map[string]*memFilesystemNode{
-						"file1": {},
-					},
-				},
-			})
-
-			So(err, ShouldBeNil)
-			So(source1, ShouldNotBeNil)
-
-			source2, err = NewSource(SourceConfig{ID: "source2"}, &memFilesystem{
-				root: &memFilesystemNode{
-					children: map[string]*memFilesystemNode{
-						"file2": {},
-					},
-				},
-			})
-
-			So(err, ShouldBeNil)
-			So(source2, ShouldNotBeNil)
-
-			merged, err = newMergedSource("merged", []Source{source1, source2, source1, source2})
-
-			Convey("it should discard the duplicates", func() {
-				var results []Result
-
-				So(err, ShouldBeNil)
-				So(merged, ShouldNotBeNil)
+				Expect(err).To(BeNil())
+				Expect(merged).NotTo(BeNil())
 
 				results = collectSourceResults(merged)
 
-				So(results, ShouldHaveLength, 2)
-
-				expectFilePathsInResults(nil, results, []string{"file1", "file2"})
+				Expect(results).To(HaveLen(2))
+				Expect(results).To(haveAllOrSomeOfTheseFilePaths("file1", "file2"))
 			})
 		})
 	})
-}
+})
 
 // Source tests
 
-func TestNewSource(t *testing.T) {
-	eventSinkTestMutex.Lock()
-	defer eventSinkTestMutex.Unlock()
-
-	Convey("When calling NewSource", t, func() {
+var _ = g.Describe("NewSource", func() {
+	g.Describe("calling NewSource", func() {
 		var err error
 		var source Source
 
-		Convey("it should succeed for valid IDs", func() {
-			for _, id := range idsValid {
-				source, err = NewSource(SourceConfig{ID: id}, &memFilesystem{})
+		g.Context("with valid IDs", func() {
+			g.It("should succeed", func() {
+				for _, id := range idsValid {
+					source, err = NewSource(SourceConfig{ID: id}, &memFilesystem{})
 
-				So(err, ShouldBeNil)
-				So(source, ShouldNotBeNil)
-			}
+					Expect(err).To(BeNil())
+					Expect(source).ToNot(BeNil())
+				}
+			})
 		})
 
-		Convey("it should fail for invalid IDs", func() {
-			for _, id := range idsInvalid {
-				source, err = NewSource(SourceConfig{ID: id}, &memFilesystem{})
+		g.Context("with invalid IDs", func() {
+			g.It("should return an error", func() {
+				for _, id := range idsInvalid {
+					source, err = NewSource(SourceConfig{ID: id}, &memFilesystem{})
 
-				So(source, ShouldBeNil)
-				So(err, ShouldNotBeNil)
-			}
+					Expect(source).To(BeNil())
+					Expect(err).NotTo(BeNil())
+				}
+			})
 		})
 
-		Convey("with a nil Filesystem", func() {
-			Convey("it should return an error", func() {
+		g.Context("with a nil Filesystem", func() {
+			g.BeforeEach(func() {
 				source, err = NewSource(SourceConfig{}, nil)
 
-				So(source, ShouldBeNil)
-				So(err, ShouldNotBeNil)
-				So(errors.Is(err, errSourceNilFilesystem), ShouldBeTrue)
+				Expect(source).To(BeNil())
+				Expect(err).NotTo(BeNil())
+			})
+
+			g.It("should return an error", func() {
+				Expect(errors.Is(err, errSourceNilFilesystem)).To(BeTrue())
 			})
 		})
 
-		Convey("with a valid Filesystem", func() {
-			Reset(resetGlobalEventSink)
+		g.Context("with a valid Filesystem", func() {
+			var sink *testEventSink
 
-			Convey("it should not return an error", func() {
-				var sink = &testEventSink{}
+			g.BeforeEach(func() {
+				sink = newTestEventSink()
 
 				RegisterEventSink(sink)
-				allowEventsFrom(componentSource, true)
 
-				source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{})
+				source, err = NewSource(SourceConfig{ID: sink.id}, &memFilesystem{})
 
-				So(err, ShouldBeNil)
-				So(source, ShouldNotBeNil)
+				Expect(err).To(BeNil())
+				Expect(source).ToNot(BeNil())
+			})
 
-				Convey("and the appropriate event should be sent", func() {
-					sink.expectEvents(eventSourceCreated)
-				})
+			g.It("should not return an error and it should send the appropriate events", func() {
+				Expect(sink).To(haveTheseEvents(eventSourceCreated))
 			})
 		})
 	})
-}
+})
 
-func TestSource(t *testing.T) {
-	eventSinkTestMutex.Lock()
-	eventSinkTestMutex.Unlock()
-
-	Convey("When creating a Source", t, func() {
+var _ = g.Describe("Source", func() {
+	g.Describe("given a new instance", func() {
 		var err error
-		var sink = &testEventSink{}
+		var sink *testEventSink
 		var source Source
 
-		Reset(resetGlobalEventSink)
+		g.BeforeEach(func() {
+			sink = newTestEventSink()
 
-		RegisterEventSink(sink)
-		allowEventsFrom(componentSource, true)
+			RegisterEventSink(sink)
+		})
 
-		Convey("which fails immediately upon access and has a Filesystem which performs no action when destroyed",
+		g.Context("which fails immediately upon access and has a Filesystem which performs no action when destroyed",
 			func() {
-				source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{
+				g.JustBeforeEach(func() {
+					source, err = NewSource(SourceConfig{ID: sink.id}, &memFilesystem{
+						absolutePathError: errors.New("absolutePath"),
+					})
+
+					Expect(err).To(BeNil())
+					Expect(source).NotTo(BeNil())
+				})
+
+				g.Describe("calling destroy", func() {
+					g.It("should not perform any action and it should send the appropriate events", func() {
+						Expect(source.destroy()).To(BeNil())
+
+						Expect(sink).To(haveTheseEvents(eventSourceCreated, eventSourceDestroyed))
+					})
+				})
+
+				g.Describe("calling Files", func() {
+					g.It("should return an error and send the appropriate events", func() {
+						var results = collectSourceResults(source)
+
+						Expect(results).To(HaveLen(1))
+						Expect(results[0].File()).To(BeNil())
+						Expect(results[0].Error()).NotTo(BeNil())
+						Expect(results[0].Error().Error()).To(Equal("absolutePath"))
+
+						Expect(sink).To(haveTheseEvents(eventSourceCreated, eventSourceStarted,
+							eventSourceResultProduced, eventSourceFinished))
+					})
+				})
+			})
+
+		g.Context("which contains a number of files and has a Filesystem which performs an action when destroyed",
+			func() {
+				g.JustBeforeEach(func() {
+					source, err = NewSource(SourceConfig{
+						ID:      sink.id,
+						Recurse: true,
+					}, &memFilesystem{
+						destroy: func() error {
+							return errors.New("destroy")
+						},
+						root: &memFilesystemNode{
+							children: map[string]*memFilesystemNode{
+								"dir1": {
+									children: map[string]*memFilesystemNode{
+										"file1": {},
+									},
+								},
+								"dir2": {
+									children: map[string]*memFilesystemNode{
+										"file2": {},
+									},
+								},
+								"file": {},
+							},
+						},
+					})
+
+					Expect(err).To(BeNil())
+					Expect(source).NotTo(BeNil())
+				})
+
+				g.Describe("calling destroy", func() {
+					g.It("should return an error and send the appropriate events", func() {
+						err = source.destroy()
+
+						Expect(err).NotTo(BeNil())
+						Expect(err.Error()).To(Equal("destroy"))
+
+						Expect(sink).To(haveTheseEvents(eventSourceCreated, eventSourceDestroyed))
+					})
+				})
+
+				g.Describe("calling Files", func() {
+					var results []Result
+
+					g.Context("without cancelling", func() {
+						g.It("should return the expected Results and send the appropriate events", func() {
+							results = collectSourceResults(source)
+
+							Expect(results).To(HaveLen(3))
+							Expect(results).To(haveAllOrSomeOfTheseFilePaths("file", "dir1/file1", "dir2/file2"))
+
+							Expect(sink).To(haveTheseEvents(eventSourceCreated, eventSourceStarted,
+								eventSourceResultProduced, eventSourceResultProduced, eventSourceResultProduced,
+								eventSourceFinished))
+						})
+					})
+
+					g.Context("and cancelling", func() {
+						g.It("should return the expected Results and send the appropriate events", func() {
+							var cancel CancelFunc
+							var in <-chan Result
+							var wg sync.WaitGroup
+
+							results = make([]Result, 0)
+
+							in, cancel = source.Files(NewContext(ContextConfig{}))
+
+							results = append(results, <-in)
+							results = append(results, <-in)
+
+							wg.Add(1)
+
+							cancel(func() {
+								for result := range in {
+									results = append(results, result)
+								}
+
+								Expect(results).To(HaveLen(2))
+								Expect(results).To(haveAllOrSomeOfTheseFilePaths("file", "dir1/file1", "dir2/file2"))
+
+								wg.Done()
+							})
+
+							wg.Wait()
+
+							Expect(sink).To(haveTheseEvents(eventSourceCreated, eventSourceStarted,
+								eventSourceResultProduced, eventSourceResultProduced, eventSourceCancelled,
+								eventSourceFinished))
+						})
+					})
+				})
+
+				g.Describe("calling ID", func() {
+					g.It("should return the expected ID", func() {
+						Expect(source.ID()).To(Equal(sink.id))
+					})
+				})
+			})
+
+		g.Context("which panics when calling Files", func() {
+			g.JustBeforeEach(func() {
+				source, err = NewSource(SourceConfig{ID: sink.id}, &memFilesystem{
 					absolutePathError: errors.New("absolutePath"),
+					panic:             true,
 				})
 
-				So(err, ShouldBeNil)
-				So(source, ShouldNotBeNil)
-
-				Convey("calling destroy should not perform any action", func() {
-					So(source.destroy(), ShouldBeNil)
-
-					Convey("and the appropriate events should be sent", func() {
-						sink.expectEvents(eventSourceCreated, eventSourceDestroyed)
-					})
-				})
-
-				Convey("calling Files should return an error", func() {
-					var results = collectSourceResults(source)
-
-					So(results, ShouldHaveLength, 1)
-					So(results[0].File(), ShouldBeNil)
-					So(results[0].Error(), ShouldNotBeNil)
-					So(results[0].Error().Error(), ShouldEqual, "absolutePath")
-
-					Convey("and the appropriate events should be sent", func() {
-						sink.expectEvents(eventSourceCreated, eventSourceStarted, eventSourceResultProduced,
-							eventSourceFinished)
-					})
-				})
+				Expect(err).To(BeNil())
+				Expect(source).NotTo(BeNil())
 			})
 
-		Convey("which contains a number of files and has a Filesystem which performs an action when destroyed", func() {
-			source, err = NewSource(SourceConfig{
-				ID:      "source",
-				Recurse: true,
-			}, &memFilesystem{
-				destroy: func() error {
-					return errors.New("destroy")
-				},
-				root: &memFilesystemNode{
-					children: map[string]*memFilesystemNode{
-						"dir1": {
-							children: map[string]*memFilesystemNode{
-								"file1": {},
-							},
-						},
-						"dir2": {
-							children: map[string]*memFilesystemNode{
-								"file2": {},
-							},
-						},
-						"file": {},
-					},
-				},
-			})
-
-			So(err, ShouldBeNil)
-			So(source, ShouldNotBeNil)
-
-			Convey("calling destroy should return the expected value", func() {
-				err = source.destroy()
-
-				So(err, ShouldNotBeNil)
-				So(err.Error(), ShouldEqual, "destroy")
-
-				Convey("and the appropriate events should be sent", func() {
-					sink.expectEvents(eventSourceCreated, eventSourceDestroyed)
-				})
-			})
-
-			Convey("calling Files", func() {
+			g.Describe("calling Files", func() {
 				var results []Result
 
-				Convey("should return the expected Results", func() {
+				g.It("should return an error instead of panicking and send the appropriate events", func() {
 					results = collectSourceResults(source)
 
-					So(results, ShouldHaveLength, 3)
+					Expect(results).To(HaveLen(1))
+					Expect(results[0].File()).To(BeNil())
+					Expect(results[0].Error()).NotTo(BeNil())
+					Expect(results[0].Error().Error()).To(Equal("a fatal error occurred: absolutePath"))
 
-					expectFilePathsInResults(nil, results, []string{"file", "dir1/file1", "dir2/file2"})
-
-					Convey("and the appropriate events should be sent", func() {
-						sink.expectEvents(eventSourceCreated, eventSourceStarted, eventSourceResultProduced,
-							eventSourceResultProduced, eventSourceResultProduced, eventSourceFinished)
-					})
-				})
-
-				Convey("and cancelling should return the expected Results", func(c C) {
-					var cancel CancelFunc
-					var in <-chan Result
-					var wg sync.WaitGroup
-
-					results = make([]Result, 0)
-
-					in, cancel = source.Files(NewContext(ContextConfig{}))
-
-					results = append(results, <-in)
-					results = append(results, <-in)
-
-					wg.Add(1)
-
-					cancel(func() {
-						for result := range in {
-							results = append(results, result)
-						}
-
-						c.So(results, ShouldHaveLength, 2)
-
-						expectFilePathsInResults(c, results, []string{"file", "dir1/file1", "dir2/file2"})
-
-						wg.Done()
-					})
-
-					wg.Wait()
-
-					Convey("and the appropriate events should be sent", func() {
-						sink.expectEvents(eventSourceCreated, eventSourceStarted, eventSourceResultProduced,
-							eventSourceResultProduced, eventSourceCancelled, eventSourceFinished)
-					})
-				})
-			})
-
-			Convey("calling ID should return the expected ID", func() {
-				So(source.ID(), ShouldEqual, "source")
-			})
-		})
-
-		Convey("which panics when calling Files", func() {
-			source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{
-				absolutePathError: errors.New("absolutePath"),
-				panic:             true,
-			})
-
-			So(err, ShouldBeNil)
-			So(source, ShouldNotBeNil)
-
-			Convey("calling Files should return an error instead of throwing a panic", func() {
-				var results = collectSourceResults(source)
-
-				So(results, ShouldHaveLength, 1)
-				So(results[0].File(), ShouldBeNil)
-				So(results[0].Error(), ShouldNotBeNil)
-				So(results[0].Error().Error(), ShouldEqual, "a fatal error occurred: absolutePath")
-
-				Convey("and the appropriate events should be sent", func() {
-					sink.expectEvents(eventSourceCreated, eventSourceStarted, eventSourceResultProduced,
-						eventSourceFinished)
+					Expect(sink).To(haveTheseEvents(eventSourceCreated, eventSourceStarted, eventSourceResultProduced,
+						eventSourceFinished))
 				})
 			})
 		})
 	})
-}
+})
 
-func TestSourceEvents(t *testing.T) {
+var _ = g.Describe("Source events", func() {
 	var id = "source"
 
-	Convey("When calling sourceEventCancelled", t, func() {
-		validateSourceEvent(sourceEventCancelled(id), componentSource, eventTypeCancelled, id)
+	g.Describe("calling sourceEventCancelled", func() {
+		g.It("should return a valid event", func() {
+			Expect(sourceEventCancelled(id)).To(beAValidEvent(componentSource, eventTypeCancelled, id))
+		})
 	})
 
-	Convey("When calling sourceEventCreated", t, func() {
-		validateSourceEvent(sourceEventCreated(id), componentSource, eventTypeCreated, id)
+	g.Describe("calling sourceEventCreated", func() {
+		g.It("should return a valid event", func() {
+			Expect(sourceEventCreated(id)).To(beAValidEvent(componentSource, eventTypeCreated, id))
+		})
 	})
 
-	Convey("When calling sourceEventDestroyed", t, func() {
-		validateSourceEvent(sourceEventDestroyed(id), componentSource, eventTypeDestroyed, id)
+	g.Describe("calling sourceEventDestroyed", func() {
+		g.It("should return a valid event", func() {
+			Expect(sourceEventDestroyed(id)).To(beAValidEvent(componentSource, eventTypeDestroyed, id))
+		})
 	})
 
-	Convey("When calling sourceEventFinished", t, func() {
-		validateSourceEvent(sourceEventFinished(id), componentSource, eventTypeFinished, id)
+	g.Describe("calling sourceEventFinished", func() {
+		g.It("should return a valid event", func() {
+			Expect(sourceEventFinished(id)).To(beAValidEvent(componentSource, eventTypeFinished, id))
+		})
 	})
 
-	Convey("When calling sourceEventResultProduced", t, func() {
-		var res = &result{
-			err: errors.New("result error"),
-			file: &file{
-				fileInfo: &nilFileInfo{
-					name: "name",
+	g.Describe("calling sourceEventResultProduced", func() {
+		g.It("should return a valid event", func() {
+			var res = &result{
+				err: errors.New("result error"),
+				file: &file{
+					fileInfo: &nilFileInfo{
+						name: "name",
+					},
+					path: newFilePath(nil, "name", "/"),
 				},
-				path: newFilePath(nil, "name", "/"),
-			},
-		}
+			}
 
-		validateSourceEvent(sourceEventResultProduced(id, res), componentSource, eventTypeResultProduced, id)
+			Expect(sourceEventResultProduced(id, res)).To(beAValidEvent(componentSource, eventTypeResultProduced, id))
+		})
 	})
 
-	Convey("When calling sourceEventStarted", t, func() {
-		validateSourceEvent(sourceEventStarted(id), componentSource, eventTypeStarted, id)
+	g.Describe("calling sourceEventStarted", func() {
+		g.It("should return a valid event", func() {
+			Expect(sourceEventStarted(id)).To(beAValidEvent(componentSource, eventTypeStarted, id))
+		})
 	})
-}
+})
+
+//
+// Private constants
+//
+
+const (
+	// Source event names for testEventSink.expectEvents()
+	eventSourceCancelled      = componentSource + "." + eventTypeCancelled
+	eventSourceCreated        = componentSource + "." + eventTypeCreated
+	eventSourceDestroyed      = componentSource + "." + eventTypeDestroyed
+	eventSourceFinished       = componentSource + "." + eventTypeFinished
+	eventSourceResultProduced = componentSource + "." + eventTypeResultProduced
+	eventSourceStarted        = componentSource + "." + eventTypeStarted
+)

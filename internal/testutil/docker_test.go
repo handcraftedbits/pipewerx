@@ -6,10 +6,10 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
-	"testing"
 	"time"
 
-	. "github.com/smartystreets/goconvey/convey"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 //
@@ -18,184 +18,228 @@ import (
 
 // Docker tests
 
-func TestDocker(t *testing.T) {
-	var docker = NewDocker("")
+var _ = Describe("Docker", func() {
+	Describe("given a new instance", func() {
+		var docker *Docker
 
-	defer docker.Destroy()
+		BeforeEach(func() {
+			docker = NewDocker("")
+		})
 
-	Convey("When creating a Docker instance", t, func() {
-		var err error
+		AfterEach(func() {
+			docker.Destroy()
+		})
 
-		Convey("calling grepLogs", func() {
+		Describe("calling grepLogs", func() {
+			var err error
 			var result bool
 
-			Convey("should fail for a non-existent resource", func() {
-				result, err = docker.grepLogs("abc", "")
+			Context("with a non-existent resource", func() {
+				It("should return an error", func() {
+					result, err = docker.grepLogs("abc", "")
 
-				So(result, ShouldBeFalse)
-				So(err, ShouldNotBeNil)
+					Expect(result).To(BeFalse())
+					Expect(err).NotTo(BeNil())
+				})
 			})
 
-			Convey("should fail for an invalid regular expression", func() {
-				err = docker.Run(echoRun)
+			Context("with an invalid regular expression", func() {
+				It("should return an error", func() {
+					err = docker.Run(echoRun)
 
-				So(err, ShouldBeNil)
+					Expect(err).To(BeNil())
 
-				result, err = docker.grepLogs("echo", "*")
+					result, err = docker.grepLogs("echo", "*")
 
-				So(result, ShouldBeFalse)
-				So(err, ShouldNotBeNil)
+					Expect(result).To(BeFalse())
+					Expect(err).NotTo(BeNil())
+				})
 			})
 
-			Convey("should fail for a non-existent container", func() {
+			Context("with a non-existent container", func() {
 				var containerID string
 
-				err = docker.Run(echoRun)
+				JustBeforeEach(func() {
+					containerID = ""
+				})
 
-				So(err, ShouldBeNil)
+				JustAfterEach(func() {
+					if containerID != "" {
+						docker.resources["echo"].Container.ID = containerID
+					}
+				})
 
-				containerID = docker.resources["echo"].Container.ID
+				It("should return an error", func() {
+					err = docker.Run(echoRun)
 
+					Expect(err).To(BeNil())
+
+					containerID = docker.resources["echo"].Container.ID
+
+					docker.resources["dummy"] = docker.resources["echo"]
+					docker.resources["dummy"].Container.ID = "xyz"
+
+					result, err = docker.grepLogs("echo", "abc")
+
+					Expect(result).To(BeFalse())
+					Expect(err).NotTo(BeNil())
+				})
+			})
+		})
+
+		Describe("calling HostPort", func() {
+			Context("with a non-existent resource", func() {
+				It("should return -1", func() {
+					Expect(docker.HostPort("abc", 123)).To(Equal(-1))
+				})
+			})
+
+			Context("with an invalid container port", func() {
+				JustBeforeEach(func() {
+					var err = docker.Run(echoRun)
+
+					Expect(err).To(BeNil())
+				})
+
+				It("should return -1", func() {
+					Expect(docker.HostPort("echo", 1234)).To(Equal(-1))
+				})
+			})
+		})
+
+		Describe("calling Run", func() {
+			var err error
+
+			Context("with an invalid Docker image", func() {
+				It("should return an error", func() {
+					err = docker.Run(&DockerRun{
+						Image: "__invalid__",
+						Name:  "invalid",
+						Tag:   "latest",
+					})
+
+					Expect(err).NotTo(BeNil())
+				})
+			})
+
+			Context("when a timeout occurs waiting for the container port", func() {
+				It("should return an error", func() {
+					docker.pool.MaxWait = time.Millisecond
+
+					err = docker.Run(&DockerRun{
+						Name:  "echo-fail",
+						Image: "hashicorp/http-echo",
+						Tag:   "latest",
+						Args:  []string{"-text", "testing"},
+						Port:  1234,
+					})
+
+					Expect(err).NotTo(BeNil())
+				})
+			})
+
+			Context("with a valid Docker image", func() {
+				It("should succeed and shouldn't start the container again on a subsequent call", func() {
+					var body []byte
+					var reader io.ReadCloser
+					var response *http.Response
+
+					err = docker.Run(echoRun)
+
+					Expect(err).To(BeNil())
+
+					response, err = http.Get(fmt.Sprintf("http://localhost:%d", docker.HostPort("echo", 5678)))
+
+					Expect(err).To(BeNil())
+					Expect(response).NotTo(BeNil())
+
+					reader = response.Body
+
+					Expect(reader).NotTo(BeNil())
+
+					body, err = ioutil.ReadAll(reader)
+
+					Expect(err).To(BeNil())
+					Expect(body).NotTo(BeNil())
+					Expect(strings.TrimSpace(string(body))).To(Equal("testing"))
+
+					Expect(docker.resources["echo"]).NotTo(BeNil())
+					Expect(docker.Run(echoRun)).To(BeNil())
+				})
+			})
+		})
+	})
+})
+
+var _ = Describe("NewDocker", func() {
+	Describe("calling NewDocker", func() {
+		Context("with an invalid endpoint", func() {
+			It("should panic", func() {
 				defer func() {
-					docker.resources["echo"].Container.ID = containerID
+					Expect(recover()).NotTo(BeNil())
 				}()
 
-				docker.resources["dummy"] = docker.resources["echo"]
-				docker.resources["dummy"].Container.ID = "xyz"
-
-				result, err = docker.grepLogs("echo", "abc")
-
-				So(result, ShouldBeFalse)
-				So(err, ShouldNotBeNil)
-			})
-		})
-
-		Convey("calling HostPort", func() {
-			Convey("should fail for a non-existent resource", func() {
-				So(docker.HostPort("abc", 123), ShouldEqual, -1)
-			})
-
-			Convey("should fail for an invalid container port", func() {
-				So(docker.HostPort("echo", 1234), ShouldEqual, -1)
-			})
-		})
-
-		Convey("calling Run", func() {
-			Convey("should return an error when running an invalid Docker image", func() {
-				err = docker.Run(&DockerRun{
-					Image: "__invalid__",
-					Name:  "invalid",
-					Tag:   "latest",
-				})
-
-				So(err, ShouldNotBeNil)
-			})
-
-			Convey("should return an error when a timeout occurs waiting for the container port", func() {
-				docker.pool.MaxWait = time.Millisecond
-
-				err = docker.Run(&DockerRun{
-					Name:  "echo-fail",
-					Image: "hashicorp/http-echo",
-					Tag:   "latest",
-					Args:  []string{"-text", "testing"},
-					Port:  1234,
-				})
-
-				So(err, ShouldNotBeNil)
-			})
-
-			Convey("should work for a valid Docker image", func() {
-				var body []byte
-				var reader io.ReadCloser
-				var response *http.Response
-
-				err = docker.Run(echoRun)
-
-				So(err, ShouldBeNil)
-
-				response, err = http.Get(fmt.Sprintf("http://localhost:%d", docker.HostPort("echo", 5678)))
-
-				So(err, ShouldBeNil)
-				So(response, ShouldNotBeNil)
-
-				reader = response.Body
-
-				So(reader, ShouldNotBeNil)
-
-				body, err = ioutil.ReadAll(reader)
-
-				So(err, ShouldBeNil)
-				So(body, ShouldNotBeNil)
-				So(strings.TrimSpace(string(body)), ShouldEqual, "testing")
-
-				Convey("and it shouldn't start the container again on a subsequent call", func() {
-					So(docker.resources["echo"], ShouldNotBeNil)
-					So(docker.Run(echoRun), ShouldBeNil)
-				})
+				_ = NewDocker("://")
 			})
 		})
 	})
-}
-
-func TestNewDocker(t *testing.T) {
-	Convey("When calling NewDocker", t, func() {
-		Convey("it should panic when an invalid endpoint is provided", func() {
-			defer func() {
-				So(recover(), ShouldNotBeNil)
-			}()
-
-			_ = NewDocker("://")
-		})
-	})
-}
+})
 
 // DockerRun tests
 
-func TestDockerRun(t *testing.T) {
-	Convey("When creating a DockerRun", t, func() {
-		var run = &DockerRun{
-			Args: []string{"arg1", "arg2"},
-			Env: map[string]string{
-				"KEY1": "VALUE1",
-			},
-			Image: "image",
-			Tag:   "tag",
-			Volumes: map[string]string{
-				"/physical1": "/logical1",
-			},
-		}
+var _ = Describe("DockerRun", func() {
+	Describe("given a new instance", func() {
+		var run *DockerRun
 
-		Convey("it should populate all fields correctly", func() {
-			var options = run.AsRunOptions()
+		BeforeEach(func() {
+			run = &DockerRun{
+				Args: []string{"arg1", "arg2"},
+				Env: map[string]string{
+					"KEY1": "VALUE1",
+				},
+				Image: "image",
+				Tag:   "tag",
+				Volumes: map[string]string{
+					"/physical1": "/logical1",
+				},
+			}
+		})
 
-			So(options, ShouldNotBeNil)
-			So(options.Cmd, ShouldHaveLength, 2)
-			So(options.Cmd[0], ShouldEqual, "arg1")
-			So(options.Cmd[1], ShouldEqual, "arg2")
-			So(options.Env, ShouldHaveLength, 1)
-			So(options.Env[0], ShouldEqual, "KEY1=VALUE1")
-			So(options.Repository, ShouldEqual, "image")
-			So(options.Tag, ShouldEqual, "tag")
-			So(options.Mounts, ShouldHaveLength, 1)
-			So(options.Mounts[0], ShouldEqual, "/physical1:/logical1")
+		Describe("calling AsRunOptions", func() {
+			It("should return a dockertest.RunOptions object that has all fields correctly populated", func() {
+				var options = run.AsRunOptions()
+
+				Expect(options).NotTo(BeNil())
+				Expect(options.Cmd).NotTo(BeNil())
+				Expect(options.Cmd).To(HaveLen(2))
+				Expect(options.Cmd[0]).To(Equal("arg1"))
+				Expect(options.Cmd[1]).To(Equal("arg2"))
+				Expect(options.Env).NotTo(BeNil())
+				Expect(options.Env).To(HaveLen(1))
+				Expect(options.Env[0]).To(Equal("KEY1=VALUE1"))
+				Expect(options.Mounts).NotTo(BeNil())
+				Expect(options.Mounts).To(HaveLen(1))
+				Expect(options.Mounts[0]).To(Equal("/physical1:/logical1"))
+				Expect(options.Repository).To(Equal("image"))
+				Expect(options.Tag).To(Equal("tag"))
+			})
 		})
 	})
-}
+})
 
 // Tests for container helpers
 
-func TestStartSambaContainer(t *testing.T) {
-	Convey("When calling StartSambaContainer", t, func() {
-		Convey("it should succeed", func() {
+var _ = Describe("StartSambaContainer", func() {
+	Describe("calling StartSambaContainer", func() {
+		It("should succeed", func() {
 			var docker = NewDocker("")
 
 			defer docker.Destroy()
 
-			StartSambaContainer(docker, TestdataPathFilesystem)
+			StartSambaContainer2(docker, TestdataPathFilesystem)
 		})
 	})
-}
+})
 
 //
 // Private variables

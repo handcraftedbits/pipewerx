@@ -12,7 +12,7 @@ import (
 	"github.com/ory/dockertest/v3"
 	dc "github.com/ory/dockertest/v3/docker"
 
-	. "github.com/smartystreets/goconvey/convey"
+	. "github.com/onsi/gomega"
 )
 
 //
@@ -193,7 +193,7 @@ func NewDocker(endpoint string) *Docker {
 	return docker
 }
 
-func StartSambaContainer(docker *Docker, absPath string) int {
+func StartSambaContainer2(docker *Docker, absPath string) int {
 	var err error
 	var port int
 	var resourceName = "samba"
@@ -215,11 +215,11 @@ func StartSambaContainer(docker *Docker, absPath string) int {
 		PingFunc: grepLogsPingFunc(docker, "samba", "daemon_ready"),
 	})
 
-	So(err, ShouldBeNil)
+	Expect(err).To(BeNil())
 
 	port = docker.HostPort(resourceName, 445)
 
-	So(port, ShouldNotEqual, -1)
+	Expect(port).NotTo(Equal(-1))
 
 	return port
 }

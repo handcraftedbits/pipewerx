@@ -3,10 +3,10 @@ package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 import (
 	"bytes"
 	"strings"
-	"testing"
 
+	g "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	"github.com/rs/zerolog"
-	. "github.com/smartystreets/goconvey/convey"
 )
 
 //
@@ -15,66 +15,90 @@ import (
 
 // Context tests
 
-func TestContext(t *testing.T) {
-	Convey("When creating a Context", t, func() {
-		var buffer bytes.Buffer
-		var context = NewContext(ContextConfig{})
+var _ = g.Describe("Context", func() {
+	g.Describe("given a new instance", func() {
+		var buffer *bytes.Buffer
+		var context Context
 
-		context.Vars()["key"] = "value"
+		g.BeforeEach(func() {
+			buffer = new(bytes.Buffer)
+		})
 
-		Convey("with a log level specified", func() {
-			context = NewContext(ContextConfig{
-				Level:  zerolog.ErrorLevel,
-				Writer: &buffer,
+		g.Context("with no special configuration", func() {
+			g.JustBeforeEach(func() {
+				context = NewContext(ContextConfig{})
+
+				context.Vars()["key"] = "value"
 			})
 
-			Convey("the logger should abide by the log level", func() {
-				context.Log().Info().Msg("info")
-				context.Log().Warn().Msg("warn")
-				context.Log().Error().Msg("error")
+			g.Describe("calling Copy", func() {
+				g.It("should return a Context that is identical to the original one", func() {
+					var copiedContext Context
 
-				So(strings.TrimSpace(buffer.String()), ShouldEndWith, "error")
+					copiedContext = context.Copy()
+
+					Expect(copiedContext.Log()).To(Equal(context.Log()))
+					Expect(copiedContext.Vars()).To(HaveLen(len(context.Vars())))
+					Expect(copiedContext.Vars()).To(HaveKey("key"))
+					Expect(copiedContext.Vars()["key"]).To(Equal(context.Vars()["key"]))
+				})
 			})
 
-			Convey("after setting a new log level the logger should abide by the new log level", func() {
-				context.Log().Warn().Msg("warn")
-
-				So(strings.TrimSpace(buffer.String()), ShouldBeEmpty)
-
-				context.SetLogLevel(zerolog.WarnLevel)
-
-				context.Log().Warn().Msg("warn")
-
-				So(strings.TrimSpace(buffer.String()), ShouldEndWith, "warn")
+			g.Describe("calling Vars", func() {
+				g.It("should return the expected variables", func() {
+					Expect(context.Vars()).To(HaveLen(1))
+					Expect(context.Vars()).To(HaveKey("key"))
+					Expect(context.Vars()["key"]).To(Equal("value"))
+				})
 			})
 		})
 
-		Convey("and specifying that JSON output should be used", func() {
-			context = NewContext(ContextConfig{
-				UseJSON: true,
-				Writer:  &buffer,
-			})
+		g.Context("with a log level specified", func() {
+			g.Describe("calling Log", func() {
+				g.JustBeforeEach(func() {
+					context = NewContext(ContextConfig{
+						Level:  zerolog.ErrorLevel,
+						Writer: buffer,
+					})
+				})
 
-			Convey("the log output should be in JSON", func() {
-				context.Log().Warn().Msg("warn")
+				g.It("should respect the log level", func() {
+					context.Log().Info().Msg("info")
+					context.Log().Warn().Msg("warn")
+					context.Log().Error().Msg("error")
 
-				So(buffer.String(), ShouldContainSubstring, "\"message\":\"warn\"")
+					Expect(strings.TrimSpace(buffer.String())).To(HaveSuffix("error"))
+				})
+
+				g.It("should respect the log level after a new log level is set", func() {
+					context.Log().Warn().Msg("warn")
+
+					Expect(strings.TrimSpace(buffer.String())).To(BeEmpty())
+
+					context.SetLogLevel(zerolog.WarnLevel)
+
+					context.Log().Warn().Msg("warn")
+
+					Expect(strings.TrimSpace(buffer.String())).To(HaveSuffix("warn"))
+				})
 			})
 		})
 
-		Convey("calling Copy should return a Context that is identical to the old Context", func() {
-			var copiedContext Context
+		g.Context("with JSON output specified", func() {
+			g.JustBeforeEach(func() {
+				context = NewContext(ContextConfig{
+					UseJSON: true,
+					Writer:  buffer,
+				})
+			})
 
-			copiedContext = context.Copy()
+			g.Describe("calling Log", func() {
+				g.It("should result in log statements being output in JSON", func() {
+					context.Log().Warn().Msg("warn")
 
-			So(copiedContext.Log(), ShouldEqual, context.Log())
-			So(copiedContext.Vars(), ShouldHaveLength, len(context.Vars()))
-			So(copiedContext.Vars()["key"], ShouldEqual, context.Vars()["key"])
-		})
-
-		Convey("calling Vars should return the expected value", func() {
-			So(context.Vars(), ShouldHaveLength, 1)
-			So(context.Vars()["key"], ShouldEqual, "value")
+					Expect(buffer.String()).To(ContainSubstring("\"message\":\"warn\""))
+				})
+			})
 		})
 	})
-}
+})

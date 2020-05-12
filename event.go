@@ -53,9 +53,13 @@ func (sink *delegatingEventSink) Send(event Event) {
 		return
 	}
 
-	sink.mutex.Lock()
-	defer sink.mutex.Unlock()
+	sink.mutex.RLock()
+	defer sink.mutex.RUnlock()
 
+	sink.sendInternal(event)
+}
+
+func (sink *delegatingEventSink) sendInternal(event Event) {
 	for _, child := range sink.children {
 		if globalEventSink.allowedMap[event.Component()] {
 			child.Send(event)
@@ -121,12 +125,16 @@ func allowEventsFrom(component string, shouldAllow bool) {
 
 	globalEventSink.mutex.Lock()
 
-	globalEventSink.allowedMap[component] = shouldAllow
+	allowEventsFromInternal(component, shouldAllow)
 
 	globalEventSink.mutex.Unlock()
 }
 
-func isEventAllowedFrom(component string) bool {
+func allowEventsFromInternal(component string, shouldAllow bool) {
+	globalEventSink.allowedMap[component] = shouldAllow
+}
+
+func eventAllowedFrom(component string) bool {
 	var result bool
 
 	globalEventSink.mutex.RLock()

@@ -36,7 +36,7 @@ func NewFilter(config FilterConfig, sources []Source, evaluator FileEvaluator) (
 		return nil, err
 	}
 
-	if isEventAllowedFrom(componentFilter) {
+	if eventAllowedFrom(componentFilter) {
 		sendEvent(filterEventCreated(config.ID))
 	}
 
@@ -59,7 +59,7 @@ type filter struct {
 }
 
 func (f *filter) destroy() error {
-	if isEventAllowedFrom(componentFilter) {
+	if eventAllowedFrom(componentFilter) {
 		sendEvent(filterEventDestroyed(f.ID()))
 	}
 
@@ -78,16 +78,16 @@ func (f *filter) Files(context Context) (<-chan Result, CancelFunc) {
 		var in <-chan Result
 		var sourceCancel CancelFunc
 
-		if isEventAllowedFrom(componentFilter) {
+		if eventAllowedFrom(componentFilter) {
 			sendEvent(filterEventStarted(f.ID()))
 		}
 
 		defer func() {
-			cancelHelper.finalize()
-
-			if isEventAllowedFrom(componentFilter) {
+			if eventAllowedFrom(componentFilter) {
 				sendEvent(filterEventFinished(f.ID()))
 			}
+
+			cancelHelper.finalize()
 		}()
 
 		in, sourceCancel = f.input.Files(context)
@@ -115,12 +115,12 @@ func (f *filter) Files(context Context) (<-chan Result, CancelFunc) {
 			if keep || res.Error() != nil {
 				select {
 				case out <- res:
-					if isEventAllowedFrom(componentFilter) {
+					if eventAllowedFrom(componentFilter) {
 						sendEvent(filterEventResultProduced(f.ID(), res))
 					}
 
 				case <-cancel:
-					if isEventAllowedFrom(componentFilter) {
+					if eventAllowedFrom(componentFilter) {
 						sendEvent(filterEventCancelled(f.ID()))
 					}
 
