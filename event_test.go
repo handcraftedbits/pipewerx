@@ -3,6 +3,8 @@ package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math/rand"
 	"sync"
 
 	g "github.com/onsi/ginkgo"
@@ -200,4 +202,17 @@ func (sink *testEventSink) Send(event Event) {
 	sink.events = append(sink.events, event)
 
 	sink.mutex.Unlock()
+}
+
+//
+// Private functions
+//
+
+func newTestEventSink() *testEventSink {
+	var id = fmt.Sprintf("%d", rand.Int())
+
+	return &testEventSink{
+		id:    id,
+		mutex: sync.Mutex{},
+	}
 }

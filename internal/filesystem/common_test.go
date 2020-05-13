@@ -55,7 +55,7 @@ var _ = Describe("fileInfo", func() {
 
 		Describe("calling Size", func() {
 			It("should return the expected size", func() {
-				Expect(fi.Size()).To(Equal(int64(1)))
+				Expect(fi.Size()).To(BeEquivalentTo(1))
 			})
 		})
 

@@ -63,11 +63,80 @@ func (matcher *matcherBeAValidEvent) Match(actual interface{}) (bool, error) {
 }
 
 func (matcher *matcherBeAValidEvent) FailureMessage(actual interface{}) string {
-	panic("implement me")
+	return ""
 }
 
 func (matcher *matcherBeAValidEvent) NegatedFailureMessage(actual interface{}) string {
-	panic("implement me")
+	return ""
+}
+
+// types.GomegaMatcher implementation used to ensure that a File Event is properly constructed and can be marshalled to
+// and unmarshalled from JSON.
+type matcherBeAValidFileEvent struct {
+	eventType      string
+	length         int64
+	path           string
+	sourceOrDestID string
+}
+
+func (matcher *matcherBeAValidFileEvent) Match(actual interface{}) (bool, error) {
+	var contents []byte
+	var err error
+	var evt Event
+	var ok bool
+	var unmarshalled = new(event)
+
+	evt, ok = actual.(Event)
+
+	if !ok {
+		return false, errors.New("beAValidFileEvent expected pipewerx.Event")
+	}
+
+	Expect(evt.Component()).To(Equal(componentFile))
+	Expect(evt.Data()).NotTo(BeNil())
+	Expect(evt.Data()).To(HaveKey(eventFieldFile))
+	Expect(evt.Data()[eventFieldFile]).To(Equal(matcher.path))
+	Expect(evt.Data()).To(HaveKey(eventFieldID))
+	Expect(evt.Data()[eventFieldID]).To(Equal(matcher.sourceOrDestID))
+	Expect(evt.Type()).To(Equal(matcher.eventType))
+
+	if matcher.eventType == eventTypeOpened || matcher.eventType == eventTypeRead {
+		Expect(evt.Data()).To(HaveKey(eventFieldLength))
+		Expect(evt.Data()[eventFieldLength]).To(BeEquivalentTo(matcher.length))
+
+		// Kind of annoying, but when the JSON is unmarshalled the length field will be float64, and reflect.DeepEqual()
+		// is doing strict comparisons; so unless we cast the "expected" map with the correct type, everything will
+		// fail.
+
+		if matcher.eventType == eventTypeRead {
+			evt.Data()[eventFieldLength] = float64(evt.Data()[eventFieldLength].(int))
+		} else {
+			evt.Data()[eventFieldLength] = float64(evt.Data()[eventFieldLength].(int64))
+		}
+	}
+
+	contents, err = json.Marshal(evt)
+
+	Expect(err).To(BeNil())
+	Expect(contents).NotTo(BeNil())
+
+	err = json.Unmarshal(contents, unmarshalled)
+
+	Expect(err).To(BeNil())
+
+	Expect(unmarshalled.Component()).To(Equal(evt.Component()))
+	Expect(unmarshalled.Data()).To(Equal(evt.Data()))
+	Expect(unmarshalled.Type()).To(Equal(evt.Type()))
+
+	return true, nil
+}
+
+func (matcher *matcherBeAValidFileEvent) FailureMessage(actual interface{}) string {
+	return ""
+}
+
+func (matcher *matcherBeAValidFileEvent) NegatedFailureMessage(actual interface{}) string {
+	return ""
 }
 
 // types.GomegaMatcher implementation used to ensure that an array of Result objects contains all or some FilePaths from
@@ -157,6 +226,15 @@ func beAValidEvent(component, eventType, id string) types.GomegaMatcher {
 		component: component,
 		eventType: eventType,
 		id:        id,
+	}
+}
+
+func beAValidFileEvent(eventType, sourceID, path string, length int64) types.GomegaMatcher {
+	return &matcherBeAValidFileEvent{
+		eventType:      eventType,
+		length:         length,
+		path:           path,
+		sourceOrDestID: sourceID,
 	}
 }
 

@@ -71,7 +71,7 @@ func (matcher *matcherHaveTheseFiles) Match(actual interface{}) (bool, error) {
 			err = reader.Close()
 
 			Expect(err).To(BeNil())
-			Expect(result.File().Size()).To(Equal(int64(len(fileContents))))
+			Expect(result.File().Size()).To(BeEquivalentTo(len(fileContents)))
 			Expect(string(fileContents)).To(Equal(contentMap[result.File().Path().String()]))
 		}
 	}

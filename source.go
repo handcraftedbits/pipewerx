@@ -133,7 +133,7 @@ func (src *source) Files(context Context) (<-chan Result, CancelFunc) {
 
 	go func() {
 		var err error
-		var file File
+		var f *file
 		var res *result
 		var stepper *pathStepper
 
@@ -164,15 +164,19 @@ func (src *source) Files(context Context) (<-chan Result, CancelFunc) {
 		}
 
 		for {
-			file, err = stepper.nextFile()
+			f, err = stepper.nextFile()
 
-			if file == nil && err == nil {
+			if f == nil && err == nil {
 				return
 			}
 
+			// Add in our ID so File.Reader() can send proper events later.
+
+			f.sourceID = src.ID()
+
 			res = &result{
 				err:  err,
-				file: file,
+				file: f,
 			}
 
 			select {

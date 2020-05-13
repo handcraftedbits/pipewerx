@@ -108,7 +108,7 @@ type pathStepper struct {
 	root  string
 }
 
-func (stepper *pathStepper) nextFile() (File, error) {
+func (stepper *pathStepper) nextFile() (*file, error) {
 	var curFile *stepperFile
 
 	for stepper.files.isEmpty() {

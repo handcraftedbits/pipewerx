@@ -2,9 +2,6 @@ package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 
 import (
 	"errors"
-	"fmt"
-	"math/rand"
-	"sync"
 
 	g "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -115,17 +112,4 @@ type wrappedError interface {
 	error
 
 	Unwrap() error
-}
-
-//
-// Private functions
-//
-
-func newTestEventSink() *testEventSink {
-	var id = fmt.Sprintf("%d", rand.Int())
-
-	return &testEventSink{
-		id:    id,
-		mutex: sync.Mutex{},
-	}
 }

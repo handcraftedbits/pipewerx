@@ -13,6 +13,7 @@ import (
 //
 
 func TestMain(m *testing.M) {
+	allowEventsFrom(componentFile, true)
 	allowEventsFrom(componentFilter, true)
 	allowEventsFrom(componentSource, true)
 

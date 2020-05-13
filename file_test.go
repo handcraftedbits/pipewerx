@@ -2,6 +2,7 @@ package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -21,13 +22,50 @@ import (
 
 var _ = g.Describe("File", func() {
 	g.Describe("given a new instance", func() {
-		g.Context("for a file with no extension", func() {
+		g.Context("for a file with a Filesystem that returns an error when calling ReadFile", func() {
 			var f File
 
 			g.BeforeEach(func() {
 				f = &file{
 					fileInfo: &nilFileInfo{
 						name: "name",
+						size: 3,
+					},
+					fs: &memFilesystem{
+						readFileError: errors.New("readFile"),
+						root: &memFilesystemNode{
+							children: map[string]*memFilesystemNode{
+								"name": {
+									contents: "abc",
+								},
+							},
+						},
+					},
+					path: newFilePath(nil, "name", "/"),
+				}
+			})
+
+			g.Describe("calling Reader", func() {
+				g.It("should return an error", func() {
+					var err error
+					var reader io.ReadCloser
+
+					reader, err = f.Reader()
+
+					Expect(err).NotTo(BeNil())
+					Expect(reader).To(BeNil())
+				})
+			})
+		})
+
+		g.Context("for a file with no extension", func() {
+			var f *file
+
+			g.BeforeEach(func() {
+				f = &file{
+					fileInfo: &nilFileInfo{
+						name: "name",
+						size: 3,
 					},
 					fs: &memFilesystem{
 						root: &memFilesystemNode{
@@ -72,8 +110,18 @@ var _ = g.Describe("File", func() {
 				})
 			})
 
-			g.Describe("calling ReadFile", func() {
-				g.It("should return the expected file contents", func() {
+			g.Describe("calling Reader", func() {
+				var sink *testEventSink
+
+				g.JustBeforeEach(func() {
+					sink = newTestEventSink()
+
+					RegisterEventSink(sink)
+
+					f.sourceID = sink.id
+				})
+
+				g.It("should return the expected file contents and send the appropriate events", func() {
 					var contents []byte
 					var err error
 					var reader io.ReadCloser
@@ -87,12 +135,31 @@ var _ = g.Describe("File", func() {
 
 					Expect(string(contents)).To(Equal("abc"))
 					Expect(err).To(BeNil())
+
+					Expect(reader.Close()).To(BeNil())
+
+					// Have to check these events manually since we're checking for specific data within them.
+
+					Expect(sink.events).To(HaveLen(3))
+					Expect(sink.events[0].Component()).To(Equal(componentFile))
+					Expect(sink.events[0].Data()).NotTo(BeNil())
+					Expect(sink.events[0].Data()).To(HaveKey(eventFieldLength))
+					Expect(sink.events[0].Data()[eventFieldLength]).To(BeEquivalentTo(3))
+					Expect(sink.events[0].Type()).To(Equal(eventTypeOpened))
+					Expect(sink.events[1].Component()).To(Equal(componentFile))
+					Expect(sink.events[1].Data()).NotTo(BeNil())
+					Expect(sink.events[1].Data()).To(HaveKey(eventFieldLength))
+					Expect(sink.events[1].Data()[eventFieldLength]).To(BeEquivalentTo(3))
+					Expect(sink.events[1].Type()).To(Equal(eventTypeRead))
+					Expect(sink.events[2].Component()).To(Equal(componentFile))
+					Expect(sink.events[2].Data()).NotTo(BeNil())
+					Expect(sink.events[2].Type()).To(Equal(eventTypeClosed))
 				})
 			})
 
 			g.Describe("calling Size", func() {
 				g.It("should return the expected size", func() {
-					Expect(f.Size()).To(Equal(int64(0)))
+					Expect(f.Size()).To(BeEquivalentTo(3))
 				})
 			})
 
@@ -129,6 +196,35 @@ var _ = g.Describe("File", func() {
 					Expect(f.Name()).To(Equal("name.ext"))
 				})
 			})
+		})
+	})
+})
+
+var _ = g.Describe("File events", func() {
+	var f = &file{
+		fileInfo: &nilFileInfo{
+			name: "name.ext",
+			size: 10,
+		},
+		path: newFilePath(nil, "name.ext", "/"),
+	}
+	var sourceID = "source"
+
+	g.Describe("calling fileEventClosed", func() {
+		g.It("should return a valid event", func() {
+			Expect(fileEventClosed(f, sourceID)).To(beAValidFileEvent(eventTypeClosed, sourceID, f.Path().String(), 0))
+		})
+	})
+
+	g.Describe("calling fileEventOpened", func() {
+		g.It("should return a valid event", func() {
+			Expect(fileEventOpened(f, sourceID)).To(beAValidFileEvent(eventTypeOpened, sourceID, f.Path().String(), 10))
+		})
+	})
+
+	g.Describe("calling fileEventRead", func() {
+		g.It("should return a valid event", func() {
+			Expect(fileEventRead(f, sourceID, 5)).To(beAValidFileEvent(eventTypeRead, sourceID, f.Path().String(), 5))
 		})
 	})
 })
@@ -490,6 +586,7 @@ func (node *memFilesystemNode) Sys() interface{} {
 // Dummy os.FileInfo implementation used to test file and fileInfoStack.
 type nilFileInfo struct {
 	name string
+	size int64
 }
 
 func (fi *nilFileInfo) Name() string {
@@ -497,7 +594,7 @@ func (fi *nilFileInfo) Name() string {
 }
 
 func (fi *nilFileInfo) Size() int64 {
-	return 0
+	return fi.size
 }
 
 func (fi *nilFileInfo) Mode() os.FileMode {

@@ -222,6 +222,10 @@ var _ = Describe("DockerRun", func() {
 var _ = Describe("StartSambaContainer", func() {
 	Describe("calling StartSambaContainer", func() {
 		It("should succeed", func() {
+			var docker = NewDocker("")
+
+			defer docker.Destroy()
+
 			StartSambaContainer(docker, TestdataPathFilesystem)
 		})
 	})

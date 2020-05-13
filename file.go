@@ -108,11 +108,40 @@ type Result interface {
 // Private types
 //
 
+// io.ReadCloser implementation that produces Events detailing file read progress.
+type eventProducingReadCloser struct {
+	file     File
+	sourceID string
+	wrapped  io.ReadCloser
+}
+
+func (reader *eventProducingReadCloser) Read(p []byte) (int, error) {
+	var amount int
+	var err error
+
+	amount, err = reader.wrapped.Read(p)
+
+	if amount > 0 && eventAllowedFrom(componentFile) {
+		sendEvent(fileEventRead(reader.file, reader.sourceID, amount))
+	}
+
+	return amount, err
+}
+
+func (reader *eventProducingReadCloser) Close() error {
+	if eventAllowedFrom(componentFile) {
+		sendEvent(fileEventClosed(reader.file, reader.sourceID))
+	}
+
+	return reader.wrapped.Close()
+}
+
 // File implementation
 type file struct {
 	fileInfo os.FileInfo
 	fs       Filesystem
 	path     FilePath
+	sourceID string
 }
 
 func (f *file) IsDir() bool {
@@ -142,7 +171,24 @@ func (f *file) Path() FilePath {
 }
 
 func (f *file) Reader() (io.ReadCloser, error) {
-	return f.fs.ReadFile(f.path.String())
+	var err error
+	var reader io.ReadCloser
+
+	reader, err = f.fs.ReadFile(f.path.String())
+
+	if err != nil {
+		return nil, err
+	}
+
+	if eventAllowedFrom(componentFile) {
+		sendEvent(fileEventOpened(f, f.sourceID))
+	}
+
+	return &eventProducingReadCloser{
+		file:     f,
+		sourceID: f.sourceID,
+		wrapped:  reader,
+	}, nil
 }
 
 func (f *file) Size() int64 {
@@ -216,8 +262,42 @@ func (res *result) File() File {
 }
 
 //
+// Private constants
+//
+
+const componentFile = "file"
+
+//
 // Private functions
 //
+
+func fileEventClosed(file File, sourceOrDestID string) Event {
+	return newFileEvent(eventTypeClosed, file, sourceOrDestID)
+}
+
+func fileEventOpened(file File, sourceOrDestID string) Event {
+	var event = newFileEvent(eventTypeOpened, file, sourceOrDestID)
+
+	event.Data()[eventFieldLength] = file.Size()
+
+	return event
+}
+
+func fileEventRead(file File, sourceOrDestID string, amount int) Event {
+	var event = newFileEvent(eventTypeRead, file, sourceOrDestID)
+
+	event.Data()[eventFieldLength] = amount
+
+	return event
+}
+
+func newFileEvent(eventType string, file File, sourceOrDestID string) Event {
+	var evt = newEvent(componentFile, sourceOrDestID, eventType)
+
+	evt.Data()[eventFieldFile] = file.Path().String()
+
+	return evt
+}
 
 func newFilePath(dir []string, name, separator string) FilePath {
 	var extension = ""
