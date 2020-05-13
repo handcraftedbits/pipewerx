@@ -91,11 +91,10 @@ func (e *event) Type() string {
 //
 
 const (
-	eventFieldError    = "error"
-	eventFieldFile     = "file"
-	eventFieldID       = "id"
-	eventFieldLength   = "length"
-	eventFieldSourceID = "sourceId"
+	eventFieldError  = "error"
+	eventFieldFile   = "file"
+	eventFieldID     = "id"
+	eventFieldLength = "length"
 
 	eventTypeCancelled      = "cancelled"
 	eventTypeClosed         = "closed"
