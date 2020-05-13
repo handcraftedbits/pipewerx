@@ -48,7 +48,7 @@ var _ = g.Describe("allowEventsFrom", func() {
 				// Kind of ugly, but we have to do this so as not to interfere with other tests.
 
 				globalEventSink.mutex.Lock()
-				globalEventSink.mutex.Unlock()
+				defer globalEventSink.mutex.Unlock()
 
 				allowEventsFromInternal(componentSource, false)
 

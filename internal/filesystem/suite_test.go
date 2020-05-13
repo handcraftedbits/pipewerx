@@ -16,27 +16,20 @@ import (
 func TestSuiteFilesystem(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecs(t, "filesystem")
-}
-
-//
-// Suite helpers
-//
-
-var _ = BeforeSuite(func() {
+	docker = testutil.NewDocker("")
 	portSamba = testutil.StartSambaContainer(docker, testutil.TestdataPathFilesystem)
-})
 
-var _ = AfterSuite(func() {
+	RunSpecs(t, "filesystem")
+
 	docker.Destroy()
-})
+}
 
 //
 // Private variables
 //
 
 var (
-	docker = testutil.NewDocker("")
+	docker *testutil.Docker
 
 	portSamba int
 )
