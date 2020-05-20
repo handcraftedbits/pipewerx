@@ -9,102 +9,76 @@ import (
 
 	g "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	"golang.handcraftedbits.com/pipewerx/internal/event"
 )
 
 //
 // Testcases
 //
 
-// Utility function tests
+// File event tests
 
-var _ = g.Describe("allowEventsFrom", func() {
-	g.Describe("calling allowEventsFrom", func() {
-		g.Context("with an empty string", func() {
-			g.It("should be ignored", func() {
-				var size int
+var _ = g.Describe("File events", func() {
+	var f = &file{
+		fileInfo: &nilFileInfo{
+			name: "name.ext",
+			size: 10,
+		},
+		path: newFilePath(nil, "name.ext", "/"),
+	}
+	var sourceID = "source"
 
-				globalEventSink.mutex.RLock()
-
-				size = len(globalEventSink.allowedMap)
-
-				globalEventSink.mutex.RUnlock()
-
-				allowEventsFrom("", true)
-				allowEventsFrom(" ", true)
-
-				globalEventSink.mutex.RLock()
-				defer globalEventSink.mutex.RUnlock()
-
-				Expect(len(globalEventSink.allowedMap)).To(Equal(size))
-			})
+	g.Describe("calling fileEventClosed", func() {
+		g.It("should return a valid event", func() {
+			Expect(fileEventClosed(f, sourceID)).To(beAValidFileEvent(event.TypeClosed, sourceID, f.Path().String(), 0))
 		})
+	})
 
-		g.Context("with a valid component", func() {
-			g.It("should allow or disallow events properly", func() {
-				var sink = newTestEventSink()
+	g.Describe("calling fileEventOpened", func() {
+		g.It("should return a valid event", func() {
+			Expect(fileEventOpened(f, sourceID)).To(beAValidFileEvent(event.TypeOpened, sourceID, f.Path().String(), 10))
+		})
+	})
 
-				RegisterEventSink(sink)
-
-				// Kind of ugly, but we have to do this so as not to interfere with other tests.
-
-				globalEventSink.mutex.Lock()
-				defer globalEventSink.mutex.Unlock()
-
-				allowEventsFromInternal(componentSource, false)
-
-				globalEventSink.sendInternal(sourceEventCreated(sink.id))
-				globalEventSink.sendInternal(sourceEventDestroyed(sink.id))
-
-				Expect(sink.events).To(HaveLen(0))
-
-				allowEventsFromInternal(componentSource, true)
-
-				globalEventSink.sendInternal(sourceEventCreated(sink.id))
-				globalEventSink.sendInternal(sourceEventDestroyed(sink.id))
-
-				Expect(sink).To(haveTheseEvents(eventSourceCreated, eventSourceDestroyed))
-			})
+	g.Describe("calling fileEventRead", func() {
+		g.It("should return a valid event", func() {
+			Expect(fileEventRead(f, sourceID, 5)).To(beAValidFileEvent(event.TypeRead, sourceID, f.Path().String(), 5))
 		})
 	})
 })
 
-var _ = g.Describe("newEvent", func() {
-	g.Describe("given a new instance", func() {
-		var event Event
+// Filter event tests
 
-		g.BeforeEach(func() {
-			event = newEvent(componentSource, "source", eventTypeCreated)
-		})
+var _ = g.Describe("Filter events", func() {
+	var id = "filter"
 
-		g.Describe("calling Component", func() {
-			g.It("should return the expected component", func() {
-				Expect(event.Component()).To(Equal(componentSource))
-			})
-		})
-
-		g.Describe("calling Data", func() {
-			g.It("should return the expected data", func() {
-				Expect(event.Data()).NotTo(BeNil())
-				Expect(event.Data()).To(HaveLen(1))
-				Expect(event.Data()).To(HaveKey(eventFieldID))
-				Expect(event.Data()[eventFieldID]).To(Equal("source"))
-			})
-		})
-
-		g.Describe("calling Type", func() {
-			g.It("should return the expected type", func() {
-				Expect(event.Type()).To(Equal(eventTypeCreated))
-			})
+	g.Describe("calling filterEventCancelled", func() {
+		g.It("should return a valid event", func() {
+			Expect(filterEventCancelled(id)).To(beAValidEvent(componentFilter, event.TypeCancelled, id))
 		})
 	})
-})
 
-var _ = g.Describe("newResultProducedEvent", func() {
-	g.Describe("calling newResultProducedEvent", func() {
-		g.Specify("should return an Event that can be marshalled to and unmarshalled from JSON", func() {
-			var contents []byte
-			var err error
-			var evt Event
+	g.Describe("calling filterEventCreated", func() {
+		g.It("should return a valid event", func() {
+			Expect(filterEventCreated(id)).To(beAValidEvent(componentFilter, event.TypeCreated, id))
+		})
+	})
+
+	g.Describe("calling filterEventDestroyed", func() {
+		g.It("should return a valid event", func() {
+			Expect(filterEventDestroyed(id)).To(beAValidEvent(componentFilter, event.TypeDestroyed, id))
+		})
+	})
+
+	g.Describe("calling filterEventFinished", func() {
+		g.It("should return a valid event", func() {
+			Expect(filterEventFinished(id)).To(beAValidEvent(componentFilter, event.TypeFinished, id))
+		})
+	})
+
+	g.Describe("calling filterEventResultProduced", func() {
+		g.It("should return a valid event", func() {
 			var res = &result{
 				err: errors.New("result error"),
 				file: &file{
@@ -114,7 +88,88 @@ var _ = g.Describe("newResultProducedEvent", func() {
 					path: newFilePath(nil, "name", "/"),
 				},
 			}
-			var unmarshalled = new(event)
+
+			Expect(filterEventResultProduced(id, res)).To(beAValidEvent(componentFilter, event.TypeResultProduced, id))
+		})
+	})
+
+	g.Describe("calling filterEventStarted", func() {
+		g.It("should return a valid event", func() {
+			Expect(filterEventStarted(id)).To(beAValidEvent(componentFilter, event.TypeStarted, id))
+		})
+	})
+})
+
+// Source event tests
+
+var _ = g.Describe("Source events", func() {
+	var id = "source"
+
+	g.Describe("calling sourceEventCancelled", func() {
+		g.It("should return a valid event", func() {
+			Expect(sourceEventCancelled(id)).To(beAValidEvent(componentSource, event.TypeCancelled, id))
+		})
+	})
+
+	g.Describe("calling sourceEventCreated", func() {
+		g.It("should return a valid event", func() {
+			Expect(sourceEventCreated(id)).To(beAValidEvent(componentSource, event.TypeCreated, id))
+		})
+	})
+
+	g.Describe("calling sourceEventDestroyed", func() {
+		g.It("should return a valid event", func() {
+			Expect(sourceEventDestroyed(id)).To(beAValidEvent(componentSource, event.TypeDestroyed, id))
+		})
+	})
+
+	g.Describe("calling sourceEventFinished", func() {
+		g.It("should return a valid event", func() {
+			Expect(sourceEventFinished(id)).To(beAValidEvent(componentSource, event.TypeFinished, id))
+		})
+	})
+
+	g.Describe("calling sourceEventResultProduced", func() {
+		g.It("should return a valid event", func() {
+			var res = &result{
+				err: errors.New("result error"),
+				file: &file{
+					fileInfo: &nilFileInfo{
+						name: "name",
+					},
+					path: newFilePath(nil, "name", "/"),
+				},
+			}
+
+			Expect(sourceEventResultProduced(id, res)).To(beAValidEvent(componentSource, event.TypeResultProduced, id))
+		})
+	})
+
+	g.Describe("calling sourceEventStarted", func() {
+		g.It("should return a valid event", func() {
+			Expect(sourceEventStarted(id)).To(beAValidEvent(componentSource, event.TypeStarted, id))
+		})
+	})
+})
+
+// Utility function tests
+
+var _ = g.Describe("newResultProducedEvent", func() {
+	g.Describe("calling newResultProducedEvent", func() {
+		g.Specify("should return an Event that can be marshalled to and unmarshalled from JSON", func() {
+			var contents []byte
+			var err error
+			var evt event.Event
+			var res = &result{
+				err: errors.New("result error"),
+				file: &file{
+					fileInfo: &nilFileInfo{
+						name: "name",
+					},
+					path: newFilePath(nil, "name", "/"),
+				},
+			}
+			var unmarshalled = event.WithID("", "", "")
 
 			evt = newResultProducedEvent(componentSource, "source", res)
 
@@ -129,50 +184,11 @@ var _ = g.Describe("newResultProducedEvent", func() {
 
 			Expect(unmarshalled.Component()).To(Equal(evt.Component()))
 			Expect(unmarshalled.Data()).NotTo(BeNil())
-			Expect(unmarshalled.Data()).To(HaveKey(eventFieldError))
-			Expect(unmarshalled.Data()[eventFieldError]).To(Equal("result error"))
-			Expect(unmarshalled.Data()).To(HaveKey(eventFieldFile))
-			Expect(unmarshalled.Data()[eventFieldFile]).To(Equal(res.File().Path().String()))
+			Expect(unmarshalled.Data()).To(HaveKey(event.FieldError))
+			Expect(unmarshalled.Data()[event.FieldError]).To(Equal("result error"))
+			Expect(unmarshalled.Data()).To(HaveKey(event.FieldFile))
+			Expect(unmarshalled.Data()[event.FieldFile]).To(Equal(res.File().Path().String()))
 			Expect(unmarshalled.Type()).To(Equal(evt.Type()))
-		})
-	})
-})
-
-var _ = g.Describe("RegisterEventSink", func() {
-	g.Describe("calling RegisterEventSink", func() {
-		g.BeforeEach(globalEventSink.mutex.Lock)
-		g.AfterEach(globalEventSink.mutex.Unlock)
-
-		g.Context("with a nil EventSink", func() {
-			g.It("should be ignored", func() {
-				var size = len(globalEventSink.children)
-
-				RegisterEventSink(nil)
-
-				Expect(len(globalEventSink.children)).To(Equal(size))
-			})
-		})
-	})
-})
-
-var _ = g.Describe("sendEvent", func() {
-	g.Describe("calling sendEvent", func() {
-		var sink *testEventSink
-
-		g.BeforeEach(func() {
-			sink = newTestEventSink()
-
-			RegisterEventSink(sink)
-		})
-
-		g.Context("with a nil Event", func() {
-			g.It("should be ignored", func() {
-				Expect(sink.events).To(HaveLen(0))
-
-				sendEvent(nil)
-
-				Expect(sink.events).To(HaveLen(0))
-			})
 		})
 	})
 })
@@ -181,15 +197,15 @@ var _ = g.Describe("sendEvent", func() {
 // Private types
 //
 
-// EventSink implementation used to verify the order of sent events.
+// Sink implementation used to verify the order of sent events.
 type testEventSink struct {
-	events []Event
+	events []event.Event
 	id     string
 	mutex  sync.Mutex
 }
 
-func (sink *testEventSink) Send(event Event) {
-	if id, ok := event.Data()[eventFieldID]; ok {
+func (sink *testEventSink) Send(evt event.Event) {
+	if id, ok := evt.Data()[event.FieldID]; ok {
 		if id != sink.id {
 			return
 		}
@@ -199,7 +215,7 @@ func (sink *testEventSink) Send(event Event) {
 
 	sink.mutex.Lock()
 
-	sink.events = append(sink.events, event)
+	sink.events = append(sink.events, evt)
 
 	sink.mutex.Unlock()
 }

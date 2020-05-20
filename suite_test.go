@@ -6,6 +6,8 @@ import (
 
 	g "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	"golang.handcraftedbits.com/pipewerx/internal/event"
 )
 
 //
@@ -13,9 +15,9 @@ import (
 //
 
 func TestMain(m *testing.M) {
-	allowEventsFrom(componentFile, true)
-	allowEventsFrom(componentFilter, true)
-	allowEventsFrom(componentSource, true)
+	event.AllowFrom(componentFile, true)
+	event.AllowFrom(componentFilter, true)
+	event.AllowFrom(componentSource, true)
 
 	os.Exit(m.Run())
 }

@@ -2,6 +2,8 @@ package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 
 import (
 	"sync"
+
+	"golang.handcraftedbits.com/pipewerx/internal/event"
 )
 
 //
@@ -39,8 +41,8 @@ func NewSource(config SourceConfig, fs Filesystem) (Source, error) {
 		return nil, err
 	}
 
-	if eventAllowedFrom(componentSource) {
-		sendEvent(sourceEventCreated(config.ID))
+	if event.IsAllowedFrom(componentSource) {
+		event.Send(sourceEventCreated(config.ID))
 	}
 
 	return &source{
@@ -137,13 +139,13 @@ func (src *source) Files(context Context) (<-chan Result, CancelFunc) {
 		var res *result
 		var stepper *pathStepper
 
-		if eventAllowedFrom(componentSource) {
-			sendEvent(sourceEventStarted(src.config.ID))
+		if event.IsAllowedFrom(componentSource) {
+			event.Send(sourceEventStarted(src.config.ID))
 		}
 
 		defer func() {
-			if eventAllowedFrom(componentSource) {
-				sendEvent(sourceEventFinished(src.config.ID))
+			if event.IsAllowedFrom(componentSource) {
+				event.Send(sourceEventFinished(src.config.ID))
 			}
 
 			cancelHelper.finalize()
@@ -156,8 +158,8 @@ func (src *source) Files(context Context) (<-chan Result, CancelFunc) {
 
 			out <- res
 
-			if eventAllowedFrom(componentSource) {
-				sendEvent(sourceEventResultProduced(src.config.ID, res))
+			if event.IsAllowedFrom(componentSource) {
+				event.Send(sourceEventResultProduced(src.config.ID, res))
 			}
 
 			return
@@ -181,13 +183,13 @@ func (src *source) Files(context Context) (<-chan Result, CancelFunc) {
 
 			select {
 			case out <- res:
-				if eventAllowedFrom(componentSource) {
-					sendEvent(sourceEventResultProduced(src.config.ID, res))
+				if event.IsAllowedFrom(componentSource) {
+					event.Send(sourceEventResultProduced(src.config.ID, res))
 				}
 
 			case <-cancel:
-				if eventAllowedFrom(componentSource) {
-					sendEvent(sourceEventCancelled(src.config.ID))
+				if event.IsAllowedFrom(componentSource) {
+					event.Send(sourceEventCancelled(src.config.ID))
 				}
 
 				return
@@ -203,18 +205,12 @@ func (src *source) ID() string {
 }
 
 func (src *source) destroy() error {
-	if eventAllowedFrom(componentSource) {
-		sendEvent(sourceEventDestroyed(src.config.ID))
+	if event.IsAllowedFrom(componentSource) {
+		event.Send(sourceEventDestroyed(src.config.ID))
 	}
 
 	return src.fs.Destroy()
 }
-
-//
-// Private constants
-//
-
-const componentSource = "source"
 
 //
 // Private functions
@@ -257,28 +253,4 @@ func newMergedSource(id string, sources []Source) (Source, error) {
 		id:      id,
 		sources: sanitizedSources,
 	}, nil
-}
-
-func sourceEventCancelled(id string) Event {
-	return newEvent(componentSource, id, eventTypeCancelled)
-}
-
-func sourceEventCreated(id string) Event {
-	return newEvent(componentSource, id, eventTypeCreated)
-}
-
-func sourceEventDestroyed(id string) Event {
-	return newEvent(componentSource, id, eventTypeDestroyed)
-}
-
-func sourceEventFinished(id string) Event {
-	return newEvent(componentSource, id, eventTypeFinished)
-}
-
-func sourceEventResultProduced(id string, result Result) Event {
-	return newResultProducedEvent(componentSource, id, result)
-}
-
-func sourceEventStarted(id string) Event {
-	return newEvent(componentSource, id, eventTypeStarted)
 }

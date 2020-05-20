@@ -7,6 +7,8 @@ import (
 
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
+
+	"golang.handcraftedbits.com/pipewerx/internal/event"
 )
 
 //
@@ -24,11 +26,11 @@ type matcherBeAValidEvent struct {
 func (matcher *matcherBeAValidEvent) Match(actual interface{}) (bool, error) {
 	var contents []byte
 	var err error
-	var evt Event
+	var evt event.Event
 	var ok bool
-	var unmarshalled = new(event)
+	var unmarshalled = event.WithID("", "", "")
 
-	evt, ok = actual.(Event)
+	evt, ok = actual.(event.Event)
 
 	if !ok {
 		return false, errors.New("beAValidEvent expected pipewerx.Event")
@@ -36,14 +38,14 @@ func (matcher *matcherBeAValidEvent) Match(actual interface{}) (bool, error) {
 
 	Expect(evt.Component()).To(Equal(matcher.component))
 	Expect(evt.Data()).NotTo(BeNil())
-	Expect(evt.Data()).To(HaveKey(eventFieldID))
-	Expect(evt.Data()[eventFieldID]).To(Equal(matcher.id))
+	Expect(evt.Data()).To(HaveKey(event.FieldID))
+	Expect(evt.Data()[event.FieldID]).To(Equal(matcher.id))
 	Expect(evt.Type()).To(Equal(matcher.eventType))
 
-	if matcher.eventType == eventTypeResultProduced {
+	if matcher.eventType == event.TypeResultProduced {
 		Expect(evt.Data()).To(SatisfyAny(
-			HaveKey(eventFieldError),
-			HaveKey(eventFieldFile)))
+			HaveKey(event.FieldError),
+			HaveKey(event.FieldFile)))
 	}
 
 	contents, err = json.Marshal(evt)
@@ -82,11 +84,11 @@ type matcherBeAValidFileEvent struct {
 func (matcher *matcherBeAValidFileEvent) Match(actual interface{}) (bool, error) {
 	var contents []byte
 	var err error
-	var evt Event
+	var evt event.Event
 	var ok bool
-	var unmarshalled = new(event)
+	var unmarshalled = event.WithID("", "", "")
 
-	evt, ok = actual.(Event)
+	evt, ok = actual.(event.Event)
 
 	if !ok {
 		return false, errors.New("beAValidFileEvent expected pipewerx.Event")
@@ -94,24 +96,24 @@ func (matcher *matcherBeAValidFileEvent) Match(actual interface{}) (bool, error)
 
 	Expect(evt.Component()).To(Equal(componentFile))
 	Expect(evt.Data()).NotTo(BeNil())
-	Expect(evt.Data()).To(HaveKey(eventFieldFile))
-	Expect(evt.Data()[eventFieldFile]).To(Equal(matcher.path))
-	Expect(evt.Data()).To(HaveKey(eventFieldID))
-	Expect(evt.Data()[eventFieldID]).To(Equal(matcher.sourceOrDestID))
+	Expect(evt.Data()).To(HaveKey(event.FieldFile))
+	Expect(evt.Data()[event.FieldFile]).To(Equal(matcher.path))
+	Expect(evt.Data()).To(HaveKey(event.FieldID))
+	Expect(evt.Data()[event.FieldID]).To(Equal(matcher.sourceOrDestID))
 	Expect(evt.Type()).To(Equal(matcher.eventType))
 
-	if matcher.eventType == eventTypeOpened || matcher.eventType == eventTypeRead {
-		Expect(evt.Data()).To(HaveKey(eventFieldLength))
-		Expect(evt.Data()[eventFieldLength]).To(BeEquivalentTo(matcher.length))
+	if matcher.eventType == event.TypeOpened || matcher.eventType == event.TypeRead {
+		Expect(evt.Data()).To(HaveKey(event.FieldLength))
+		Expect(evt.Data()[event.FieldLength]).To(BeEquivalentTo(matcher.length))
 
 		// Kind of annoying, but when the JSON is unmarshalled the length field will be float64, and reflect.DeepEqual()
 		// is doing strict comparisons; so unless we cast the "expected" map with the correct type, everything will
 		// fail.
 
-		if matcher.eventType == eventTypeRead {
-			evt.Data()[eventFieldLength] = float64(evt.Data()[eventFieldLength].(int))
+		if matcher.eventType == event.TypeRead {
+			evt.Data()[event.FieldLength] = float64(evt.Data()[event.FieldLength].(int))
 		} else {
-			evt.Data()[eventFieldLength] = float64(evt.Data()[eventFieldLength].(int64))
+			evt.Data()[event.FieldLength] = float64(evt.Data()[event.FieldLength].(int64))
 		}
 	}
 

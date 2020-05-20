@@ -1,179 +1,85 @@
 package pipewerx // import "golang.handcraftedbits.com/pipewerx"
 
 import (
-	"strings"
-	"sync"
+	"golang.handcraftedbits.com/pipewerx/internal/event"
 )
-
-//
-// Public types
-//
-
-type Event interface {
-	Component() string
-
-	Data() map[string]interface{}
-
-	Type() string
-}
-
-type EventSink interface {
-	Send(event Event)
-}
-
-//
-// Public functions
-//
-
-func RegisterEventSink(eventSink EventSink) {
-	if eventSink == nil {
-		return
-	}
-
-	globalEventSink.mutex.Lock()
-
-	globalEventSink.children = append(globalEventSink.children, eventSink)
-
-	globalEventSink.mutex.Unlock()
-}
-
-//
-// Private types
-//
-
-// EventSink implementation that delegates to child EventSinks.
-type delegatingEventSink struct {
-	allowedMap map[string]bool
-	children   []EventSink
-	mutex      sync.RWMutex
-}
-
-func (sink *delegatingEventSink) Send(event Event) {
-	if event == nil {
-		return
-	}
-
-	sink.mutex.RLock()
-	defer sink.mutex.RUnlock()
-
-	sink.sendInternal(event)
-}
-
-func (sink *delegatingEventSink) sendInternal(event Event) {
-	for _, child := range sink.children {
-		if globalEventSink.allowedMap[event.Component()] {
-			child.Send(event)
-		}
-	}
-}
-
-// Event implementation
-type event struct {
-	EventComponent string                 `json:"component"`
-	EventData      map[string]interface{} `json:"data"`
-	EventType      string                 `json:"type"`
-}
-
-func (e *event) Component() string {
-	return e.EventComponent
-}
-
-func (e *event) Data() map[string]interface{} {
-	return e.EventData
-}
-
-func (e *event) Type() string {
-	return e.EventType
-}
 
 //
 // Private constants
 //
 
 const (
-	eventFieldError  = "error"
-	eventFieldFile   = "file"
-	eventFieldID     = "id"
-	eventFieldLength = "length"
-
-	eventTypeCancelled      = "cancelled"
-	eventTypeClosed         = "closed"
-	eventTypeCreated        = "created"
-	eventTypeDestroyed      = "destroyed"
-	eventTypeFinished       = "finished"
-	eventTypeOpened         = "opened"
-	eventTypeRead           = "read"
-	eventTypeResultProduced = "resultProduced"
-	eventTypeStarted        = "started"
-)
-
-//
-// Private variables
-//
-
-var (
-	globalEventSink = &delegatingEventSink{
-		allowedMap: make(map[string]bool),
-		mutex:      sync.RWMutex{},
-	}
+	componentFile   = "file"
+	componentFilter = "filter"
+	componentSource = "source"
 )
 
 //
 // Private functions
 //
 
-func allowEventsFrom(component string, shouldAllow bool) {
-	if strings.TrimSpace(component) == "" {
-		return
-	}
-
-	globalEventSink.mutex.Lock()
-
-	allowEventsFromInternal(component, shouldAllow)
-
-	globalEventSink.mutex.Unlock()
-}
-
-func allowEventsFromInternal(component string, shouldAllow bool) {
-	globalEventSink.allowedMap[component] = shouldAllow
-}
-
-func eventAllowedFrom(component string) bool {
-	var result bool
-
-	globalEventSink.mutex.RLock()
-
-	result = globalEventSink.allowedMap[component]
-
-	globalEventSink.mutex.RUnlock()
-
-	return result
-}
-
-func newEvent(component, id, eventType string) Event {
-	return &event{
-		EventComponent: component,
-		EventData: map[string]interface{}{
-			eventFieldID: id,
-		},
-		EventType: eventType,
-	}
-}
-
-func newResultProducedEvent(component, id string, result Result) Event {
-	var event = newEvent(component, id, eventTypeResultProduced)
+func newResultProducedEvent(component, id string, result Result) event.Event {
+	var evt = event.WithID(component, id, event.TypeResultProduced)
 
 	if result.Error() != nil {
-		event.Data()[eventFieldError] = result.Error().Error()
+		evt.Data()[event.FieldError] = result.Error().Error()
 	}
 
 	if result.File() != nil {
-		event.Data()[eventFieldFile] = result.File().Path().String()
+		evt.Data()[event.FieldFile] = result.File().Path().String()
 	}
 
-	return event
+	return evt
 }
 
-func sendEvent(event Event) {
-	globalEventSink.Send(event)
+// Filter event helpers
+
+func filterEventCancelled(id string) event.Event {
+	return event.WithID(componentFilter, id, event.TypeCancelled)
+}
+
+func filterEventCreated(id string) event.Event {
+	return event.WithID(componentFilter, id, event.TypeCreated)
+}
+
+func filterEventDestroyed(id string) event.Event {
+	return event.WithID(componentFilter, id, event.TypeDestroyed)
+}
+
+func filterEventFinished(id string) event.Event {
+	return event.WithID(componentFilter, id, event.TypeFinished)
+}
+
+func filterEventResultProduced(id string, result Result) event.Event {
+	return newResultProducedEvent(componentFilter, id, result)
+}
+
+func filterEventStarted(id string) event.Event {
+	return event.WithID(componentFilter, id, event.TypeStarted)
+}
+
+// Source event helpers
+
+func sourceEventCancelled(id string) event.Event {
+	return event.WithID(componentSource, id, event.TypeCancelled)
+}
+
+func sourceEventCreated(id string) event.Event {
+	return event.WithID(componentSource, id, event.TypeCreated)
+}
+
+func sourceEventDestroyed(id string) event.Event {
+	return event.WithID(componentSource, id, event.TypeDestroyed)
+}
+
+func sourceEventFinished(id string) event.Event {
+	return event.WithID(componentSource, id, event.TypeFinished)
+}
+
+func sourceEventResultProduced(id string, result Result) event.Event {
+	return newResultProducedEvent(componentSource, id, result)
+}
+
+func sourceEventStarted(id string) event.Event {
+	return event.WithID(componentSource, id, event.TypeStarted)
 }

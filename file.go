@@ -7,6 +7,8 @@ import (
 	pathutil "path"
 	"strings"
 	"time"
+
+	"golang.handcraftedbits.com/pipewerx/internal/event"
 )
 
 //
@@ -121,16 +123,16 @@ func (reader *eventProducingReadCloser) Read(p []byte) (int, error) {
 
 	amount, err = reader.wrapped.Read(p)
 
-	if amount > 0 && eventAllowedFrom(componentFile) {
-		sendEvent(fileEventRead(reader.file, reader.sourceID, amount))
+	if amount > 0 && event.IsAllowedFrom(componentFile) {
+		event.Send(fileEventRead(reader.file, reader.sourceID, amount))
 	}
 
 	return amount, err
 }
 
 func (reader *eventProducingReadCloser) Close() error {
-	if eventAllowedFrom(componentFile) {
-		sendEvent(fileEventClosed(reader.file, reader.sourceID))
+	if event.IsAllowedFrom(componentFile) {
+		event.Send(fileEventClosed(reader.file, reader.sourceID))
 	}
 
 	return reader.wrapped.Close()
@@ -180,8 +182,8 @@ func (f *file) Reader() (io.ReadCloser, error) {
 		return nil, err
 	}
 
-	if eventAllowedFrom(componentFile) {
-		sendEvent(fileEventOpened(f, f.sourceID))
+	if event.IsAllowedFrom(componentFile) {
+		event.Send(fileEventOpened(f, f.sourceID))
 	}
 
 	return &eventProducingReadCloser{
@@ -262,39 +264,33 @@ func (res *result) File() File {
 }
 
 //
-// Private constants
-//
-
-const componentFile = "file"
-
-//
 // Private functions
 //
 
-func fileEventClosed(file File, sourceOrDestID string) Event {
-	return newFileEvent(eventTypeClosed, file, sourceOrDestID)
+func fileEventClosed(file File, sourceOrDestID string) event.Event {
+	return newFileEvent(event.TypeClosed, file, sourceOrDestID)
 }
 
-func fileEventOpened(file File, sourceOrDestID string) Event {
-	var event = newFileEvent(eventTypeOpened, file, sourceOrDestID)
+func fileEventOpened(file File, sourceOrDestID string) event.Event {
+	var evt = newFileEvent(event.TypeOpened, file, sourceOrDestID)
 
-	event.Data()[eventFieldLength] = file.Size()
+	evt.Data()[event.FieldLength] = file.Size()
 
-	return event
+	return evt
 }
 
-func fileEventRead(file File, sourceOrDestID string, amount int) Event {
-	var event = newFileEvent(eventTypeRead, file, sourceOrDestID)
+func fileEventRead(file File, sourceOrDestID string, amount int) event.Event {
+	var evt = newFileEvent(event.TypeRead, file, sourceOrDestID)
 
-	event.Data()[eventFieldLength] = amount
+	evt.Data()[event.FieldLength] = amount
 
-	return event
+	return evt
 }
 
-func newFileEvent(eventType string, file File, sourceOrDestID string) Event {
-	var evt = newEvent(componentFile, sourceOrDestID, eventType)
+func newFileEvent(eventType string, file File, sourceOrDestID string) event.Event {
+	var evt = event.WithID(componentFile, sourceOrDestID, eventType)
 
-	evt.Data()[eventFieldFile] = file.Path().String()
+	evt.Data()[event.FieldFile] = file.Path().String()
 
 	return evt
 }

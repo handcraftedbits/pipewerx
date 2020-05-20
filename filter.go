@@ -1,4 +1,7 @@
 package pipewerx // import "golang.handcraftedbits.com/pipewerx"
+import (
+	"golang.handcraftedbits.com/pipewerx/internal/event"
+)
 
 //
 // Public types
@@ -36,8 +39,8 @@ func NewFilter(config FilterConfig, sources []Source, evaluator FileEvaluator) (
 		return nil, err
 	}
 
-	if eventAllowedFrom(componentFilter) {
-		sendEvent(filterEventCreated(config.ID))
+	if event.IsAllowedFrom(componentFilter) {
+		event.Send(filterEventCreated(config.ID))
 	}
 
 	return &filter{
@@ -59,8 +62,8 @@ type filter struct {
 }
 
 func (f *filter) destroy() error {
-	if eventAllowedFrom(componentFilter) {
-		sendEvent(filterEventDestroyed(f.ID()))
+	if event.IsAllowedFrom(componentFilter) {
+		event.Send(filterEventDestroyed(f.ID()))
 	}
 
 	return f.evaluator.Destroy()
@@ -78,13 +81,13 @@ func (f *filter) Files(context Context) (<-chan Result, CancelFunc) {
 		var in <-chan Result
 		var sourceCancel CancelFunc
 
-		if eventAllowedFrom(componentFilter) {
-			sendEvent(filterEventStarted(f.ID()))
+		if event.IsAllowedFrom(componentFilter) {
+			event.Send(filterEventStarted(f.ID()))
 		}
 
 		defer func() {
-			if eventAllowedFrom(componentFilter) {
-				sendEvent(filterEventFinished(f.ID()))
+			if event.IsAllowedFrom(componentFilter) {
+				event.Send(filterEventFinished(f.ID()))
 			}
 
 			cancelHelper.finalize()
@@ -115,13 +118,13 @@ func (f *filter) Files(context Context) (<-chan Result, CancelFunc) {
 			if keep || res.Error() != nil {
 				select {
 				case out <- res:
-					if eventAllowedFrom(componentFilter) {
-						sendEvent(filterEventResultProduced(f.ID(), res))
+					if event.IsAllowedFrom(componentFilter) {
+						event.Send(filterEventResultProduced(f.ID(), res))
 					}
 
 				case <-cancel:
-					if eventAllowedFrom(componentFilter) {
-						sendEvent(filterEventCancelled(f.ID()))
+					if event.IsAllowedFrom(componentFilter) {
+						event.Send(filterEventCancelled(f.ID()))
 					}
 
 					sourceCancel(nil)
@@ -137,38 +140,4 @@ func (f *filter) Files(context Context) (<-chan Result, CancelFunc) {
 
 func (f *filter) ID() string {
 	return f.config.ID
-}
-
-//
-// Private constants
-//
-
-const componentFilter = "filter"
-
-//
-// Private functions
-//
-
-func filterEventCancelled(id string) Event {
-	return newEvent(componentFilter, id, eventTypeCancelled)
-}
-
-func filterEventCreated(id string) Event {
-	return newEvent(componentFilter, id, eventTypeCreated)
-}
-
-func filterEventDestroyed(id string) Event {
-	return newEvent(componentFilter, id, eventTypeDestroyed)
-}
-
-func filterEventFinished(id string) Event {
-	return newEvent(componentFilter, id, eventTypeFinished)
-}
-
-func filterEventResultProduced(id string, result Result) Event {
-	return newResultProducedEvent(componentFilter, id, result)
-}
-
-func filterEventStarted(id string) Event {
-	return newEvent(componentFilter, id, eventTypeStarted)
 }

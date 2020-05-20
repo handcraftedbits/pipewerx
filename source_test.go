@@ -6,6 +6,8 @@ import (
 
 	g "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	"golang.handcraftedbits.com/pipewerx/internal/event"
 )
 
 //
@@ -343,7 +345,7 @@ var _ = g.Describe("NewSource", func() {
 			g.BeforeEach(func() {
 				sink = newTestEventSink()
 
-				RegisterEventSink(sink)
+				event.RegisterSink(sink)
 
 				source, err = NewSource(SourceConfig{ID: sink.id}, &memFilesystem{})
 
@@ -367,7 +369,7 @@ var _ = g.Describe("Source", func() {
 		g.BeforeEach(func() {
 			sink = newTestEventSink()
 
-			RegisterEventSink(sink)
+			event.RegisterSink(sink)
 		})
 
 		g.Context("which fails immediately upon access and has a Filesystem which performs no action when destroyed",
@@ -534,66 +536,16 @@ var _ = g.Describe("Source", func() {
 	})
 })
 
-var _ = g.Describe("Source events", func() {
-	var id = "source"
-
-	g.Describe("calling sourceEventCancelled", func() {
-		g.It("should return a valid event", func() {
-			Expect(sourceEventCancelled(id)).To(beAValidEvent(componentSource, eventTypeCancelled, id))
-		})
-	})
-
-	g.Describe("calling sourceEventCreated", func() {
-		g.It("should return a valid event", func() {
-			Expect(sourceEventCreated(id)).To(beAValidEvent(componentSource, eventTypeCreated, id))
-		})
-	})
-
-	g.Describe("calling sourceEventDestroyed", func() {
-		g.It("should return a valid event", func() {
-			Expect(sourceEventDestroyed(id)).To(beAValidEvent(componentSource, eventTypeDestroyed, id))
-		})
-	})
-
-	g.Describe("calling sourceEventFinished", func() {
-		g.It("should return a valid event", func() {
-			Expect(sourceEventFinished(id)).To(beAValidEvent(componentSource, eventTypeFinished, id))
-		})
-	})
-
-	g.Describe("calling sourceEventResultProduced", func() {
-		g.It("should return a valid event", func() {
-			var res = &result{
-				err: errors.New("result error"),
-				file: &file{
-					fileInfo: &nilFileInfo{
-						name: "name",
-					},
-					path: newFilePath(nil, "name", "/"),
-				},
-			}
-
-			Expect(sourceEventResultProduced(id, res)).To(beAValidEvent(componentSource, eventTypeResultProduced, id))
-		})
-	})
-
-	g.Describe("calling sourceEventStarted", func() {
-		g.It("should return a valid event", func() {
-			Expect(sourceEventStarted(id)).To(beAValidEvent(componentSource, eventTypeStarted, id))
-		})
-	})
-})
-
 //
 // Private constants
 //
 
 const (
 	// Source event names for testEventSink.expectEvents()
-	eventSourceCancelled      = componentSource + "." + eventTypeCancelled
-	eventSourceCreated        = componentSource + "." + eventTypeCreated
-	eventSourceDestroyed      = componentSource + "." + eventTypeDestroyed
-	eventSourceFinished       = componentSource + "." + eventTypeFinished
-	eventSourceResultProduced = componentSource + "." + eventTypeResultProduced
-	eventSourceStarted        = componentSource + "." + eventTypeStarted
+	eventSourceCancelled      = componentSource + "." + event.TypeCancelled
+	eventSourceCreated        = componentSource + "." + event.TypeCreated
+	eventSourceDestroyed      = componentSource + "." + event.TypeDestroyed
+	eventSourceFinished       = componentSource + "." + event.TypeFinished
+	eventSourceResultProduced = componentSource + "." + event.TypeResultProduced
+	eventSourceStarted        = componentSource + "." + event.TypeStarted
 )

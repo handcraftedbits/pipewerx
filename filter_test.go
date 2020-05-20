@@ -6,6 +6,8 @@ import (
 
 	g "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	"golang.handcraftedbits.com/pipewerx/internal/event"
 )
 
 //
@@ -24,7 +26,7 @@ var _ = g.Describe("Filter", func() {
 		g.BeforeEach(func() {
 			sink = newTestEventSink()
 
-			RegisterEventSink(sink)
+			event.RegisterSink(sink)
 		})
 
 		g.Context("which uses a FileEvaluator that discards some files and returns an error on destroy", func() {
@@ -163,56 +165,6 @@ var _ = g.Describe("Filter", func() {
 	})
 })
 
-var _ = g.Describe("Filter events", func() {
-	var id = "filter"
-
-	g.Describe("calling filterEventCancelled", func() {
-		g.It("should return a valid event", func() {
-			Expect(filterEventCancelled(id)).To(beAValidEvent(componentFilter, eventTypeCancelled, id))
-		})
-	})
-
-	g.Describe("calling filterEventCreated", func() {
-		g.It("should return a valid event", func() {
-			Expect(filterEventCreated(id)).To(beAValidEvent(componentFilter, eventTypeCreated, id))
-		})
-	})
-
-	g.Describe("calling filterEventDestroyed", func() {
-		g.It("should return a valid event", func() {
-			Expect(filterEventDestroyed(id)).To(beAValidEvent(componentFilter, eventTypeDestroyed, id))
-		})
-	})
-
-	g.Describe("calling filterEventFinished", func() {
-		g.It("should return a valid event", func() {
-			Expect(filterEventFinished(id)).To(beAValidEvent(componentFilter, eventTypeFinished, id))
-		})
-	})
-
-	g.Describe("calling filterEventResultProduced", func() {
-		g.It("should return a valid event", func() {
-			var res = &result{
-				err: errors.New("result error"),
-				file: &file{
-					fileInfo: &nilFileInfo{
-						name: "name",
-					},
-					path: newFilePath(nil, "name", "/"),
-				},
-			}
-
-			Expect(filterEventResultProduced(id, res)).To(beAValidEvent(componentFilter, eventTypeResultProduced, id))
-		})
-	})
-
-	g.Describe("calling filterEventStarted", func() {
-		g.It("should return a valid event", func() {
-			Expect(filterEventStarted(id)).To(beAValidEvent(componentFilter, eventTypeStarted, id))
-		})
-	})
-})
-
 var _ = g.Describe("NewFilter", func() {
 	g.Describe("calling NewFilter", func() {
 		var err error
@@ -274,7 +226,7 @@ var _ = g.Describe("NewFilter", func() {
 			g.BeforeEach(func() {
 				sink = newTestEventSink()
 
-				RegisterEventSink(sink)
+				event.RegisterSink(sink)
 
 				source, err = NewSource(SourceConfig{ID: "source"}, &memFilesystem{
 					root: &memFilesystemNode{
@@ -323,10 +275,10 @@ var _ = g.Describe("NewFilter", func() {
 
 const (
 	// Filter event names for testEventSink.expectEvents()
-	eventFilterCancelled      = componentFilter + "." + eventTypeCancelled
-	eventFilterCreated        = componentFilter + "." + eventTypeCreated
-	eventFilterDestroyed      = componentFilter + "." + eventTypeDestroyed
-	eventFilterFinished       = componentFilter + "." + eventTypeFinished
-	eventFilterResultProduced = componentFilter + "." + eventTypeResultProduced
-	eventFilterStarted        = componentFilter + "." + eventTypeStarted
+	eventFilterCancelled      = componentFilter + "." + event.TypeCancelled
+	eventFilterCreated        = componentFilter + "." + event.TypeCreated
+	eventFilterDestroyed      = componentFilter + "." + event.TypeDestroyed
+	eventFilterFinished       = componentFilter + "." + event.TypeFinished
+	eventFilterResultProduced = componentFilter + "." + event.TypeResultProduced
+	eventFilterStarted        = componentFilter + "." + event.TypeStarted
 )

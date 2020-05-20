@@ -12,6 +12,8 @@ import (
 
 	g "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	"golang.handcraftedbits.com/pipewerx/internal/event"
 )
 
 //
@@ -116,7 +118,7 @@ var _ = g.Describe("File", func() {
 				g.JustBeforeEach(func() {
 					sink = newTestEventSink()
 
-					RegisterEventSink(sink)
+					event.RegisterSink(sink)
 
 					f.sourceID = sink.id
 				})
@@ -143,17 +145,17 @@ var _ = g.Describe("File", func() {
 					Expect(sink.events).To(HaveLen(3))
 					Expect(sink.events[0].Component()).To(Equal(componentFile))
 					Expect(sink.events[0].Data()).NotTo(BeNil())
-					Expect(sink.events[0].Data()).To(HaveKey(eventFieldLength))
-					Expect(sink.events[0].Data()[eventFieldLength]).To(BeEquivalentTo(3))
-					Expect(sink.events[0].Type()).To(Equal(eventTypeOpened))
+					Expect(sink.events[0].Data()).To(HaveKey(event.FieldLength))
+					Expect(sink.events[0].Data()[event.FieldLength]).To(BeEquivalentTo(3))
+					Expect(sink.events[0].Type()).To(Equal(event.TypeOpened))
 					Expect(sink.events[1].Component()).To(Equal(componentFile))
 					Expect(sink.events[1].Data()).NotTo(BeNil())
-					Expect(sink.events[1].Data()).To(HaveKey(eventFieldLength))
-					Expect(sink.events[1].Data()[eventFieldLength]).To(BeEquivalentTo(3))
-					Expect(sink.events[1].Type()).To(Equal(eventTypeRead))
+					Expect(sink.events[1].Data()).To(HaveKey(event.FieldLength))
+					Expect(sink.events[1].Data()[event.FieldLength]).To(BeEquivalentTo(3))
+					Expect(sink.events[1].Type()).To(Equal(event.TypeRead))
 					Expect(sink.events[2].Component()).To(Equal(componentFile))
 					Expect(sink.events[2].Data()).NotTo(BeNil())
-					Expect(sink.events[2].Type()).To(Equal(eventTypeClosed))
+					Expect(sink.events[2].Type()).To(Equal(event.TypeClosed))
 				})
 			})
 
@@ -196,35 +198,6 @@ var _ = g.Describe("File", func() {
 					Expect(f.Name()).To(Equal("name.ext"))
 				})
 			})
-		})
-	})
-})
-
-var _ = g.Describe("File events", func() {
-	var f = &file{
-		fileInfo: &nilFileInfo{
-			name: "name.ext",
-			size: 10,
-		},
-		path: newFilePath(nil, "name.ext", "/"),
-	}
-	var sourceID = "source"
-
-	g.Describe("calling fileEventClosed", func() {
-		g.It("should return a valid event", func() {
-			Expect(fileEventClosed(f, sourceID)).To(beAValidFileEvent(eventTypeClosed, sourceID, f.Path().String(), 0))
-		})
-	})
-
-	g.Describe("calling fileEventOpened", func() {
-		g.It("should return a valid event", func() {
-			Expect(fileEventOpened(f, sourceID)).To(beAValidFileEvent(eventTypeOpened, sourceID, f.Path().String(), 10))
-		})
-	})
-
-	g.Describe("calling fileEventRead", func() {
-		g.It("should return a valid event", func() {
-			Expect(fileEventRead(f, sourceID, 5)).To(beAValidFileEvent(eventTypeRead, sourceID, f.Path().String(), 5))
 		})
 	})
 })
